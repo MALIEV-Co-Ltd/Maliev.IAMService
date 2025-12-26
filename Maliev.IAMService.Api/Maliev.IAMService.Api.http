@@ -1,0 +1,6 @@
+@Maliev.IAMService.Api_HostAddress = http://localhost:5134
+
+GET {{Maliev.IAMService.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
