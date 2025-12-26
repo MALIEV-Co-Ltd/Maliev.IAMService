@@ -1,0 +1,67 @@
+﻿name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - staging
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: iam_service_test_db
+          PGDATA: /var/lib/postgresql/data/pgdata
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.x'
+
+      - name: Switch to PackageReference for CI
+        run: |
+          # Replace ProjectReference with PackageReference in all service csproj files
+          for file in ; do
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' ""
+          done
+          echo "Switched to PackageReference for ServiceDefaults"
+
+      - name: Restore dependencies
+        run: dotnet restore Maliev.IAMService.sln
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
+
+      - name: Build solution
+        run: dotnet build Maliev.IAMService.sln --no-restore --configuration Release
+
+      - name: Run tests
+        run: dotnet test Maliev.IAMService.sln --no-build --configuration Release --verbosity normal
+        env:
+          ConnectionStrings__IAMDbContext: "Server=localhost;Port=5432;Database=iam_service_test_db;User Id=postgres;Password=postgres;"
+
+      - name: Check for warnings
+        run: |
+          if dotnet build Maliev.IAMService.sln --no-restore --configuration Release 2>&1 | grep -i "warning"; then
+            echo "Build contains warnings. Please fix all warnings."
+            exit 1
+          fi
+          echo "Build is clean - no warnings found"
