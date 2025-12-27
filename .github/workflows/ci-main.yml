@@ -25,8 +25,40 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Switch to PackageReference for CI
+        run: |
+          # Replace ProjectReference with PackageReference in all service csproj files
+          echo "Converting ProjectReferences to PackageReferences..."
+
+          for file in $(find . -name "*.csproj"); do
+            echo "Processing $file"
+
+            # Backup
+            cp "$file" "$file.bak"
+
+            # Replace Aspire ServiceDefaults
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
+
+            # Replace MessagingContracts (if present)
+            sed -i 's|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include="Maliev.MessagingContracts" Version="1.0.*" />|g' "$file"
+
+            # Verify changes
+            if grep -q "ProjectReference.*Maliev.Aspire.ServiceDefaults" "$file"; then
+              echo "ERROR: Failed to replace Aspire.ServiceDefaults in $file"
+              exit 1
+            fi
+
+            # Show diff
+            diff "$file.bak" "$file" || true
+          done
+
+          echo "Switched to PackageReference for ServiceDefaults and MessagingContracts"
+
       - name: Restore dependencies
         run: dotnet restore
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
       - name: Build
         run: dotnet build --no-restore --configuration Release

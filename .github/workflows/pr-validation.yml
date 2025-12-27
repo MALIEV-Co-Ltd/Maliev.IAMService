@@ -39,10 +39,31 @@ jobs:
       - name: Switch to PackageReference for CI
         run: |
           # Replace ProjectReference with PackageReference in all service csproj files
-          
+          echo "Converting ProjectReferences to PackageReferences..."
+
           for file in $(find . -name "*.csproj"); do
+            echo "Processing $file"
+
+            # Backup
+            cp "$file" "$file.bak"
+
+            # Replace Aspire ServiceDefaults
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
+
+            # Replace MessagingContracts (if present)
+            sed -i 's|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include="Maliev.MessagingContracts" Version="1.0.*" />|g' "$file"
+
+            # Verify changes
+            if grep -q "ProjectReference.*Maliev.Aspire.ServiceDefaults" "$file"; then
+              echo "ERROR: Failed to replace Aspire.ServiceDefaults in $file"
+              exit 1
+            fi
+
+            # Show diff
+            diff "$file.bak" "$file" || true
           done
-          echo "Switched to PackageReference for ServiceDefaults"
+
+          echo "Switched to PackageReference for ServiceDefaults and MessagingContracts"
 
       - name: Restore dependencies
         run: dotnet restore Maliev.IAMService.sln
@@ -54,7 +75,6 @@ jobs:
         run: dotnet build Maliev.IAMService.sln --no-restore --configuration Release
 
       - name: Run tests
-        continue-on-error: true
         run: dotnet test Maliev.IAMService.sln --no-build --configuration Release --verbosity normal
         env:
           ConnectionStrings__IAMDbContext: "Server=localhost;Port=5432;Database=iam_service_test_db;User Id=postgres;Password=postgres;"
