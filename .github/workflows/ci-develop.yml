@@ -176,3 +176,6 @@ jobs:
 
       - name: Check for vulnerable packages
         run: dotnet list package --vulnerable --include-transitive
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
