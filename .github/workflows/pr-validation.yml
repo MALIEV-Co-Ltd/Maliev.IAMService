@@ -61,7 +61,7 @@ jobs:
 
       - name: Check for warnings
         run: |
-          if dotnet build Maliev.IAMService.sln --no-restore --configuration Release 2>&1 | grep -i "warning"; then
+          if dotnet build Maliev.IAMService.sln --no-restore --configuration Release 2>&1 | grep -qi "warning"; then
             echo "Build contains warnings. Please fix all warnings."
             exit 1
           fi
