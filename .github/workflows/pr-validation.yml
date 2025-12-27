@@ -58,6 +58,5 @@ jobs:
         run: dotnet test Maliev.IAMService.sln --no-build --configuration Release --verbosity normal
         env:
           ConnectionStrings__IAMDbContext: "Server=localhost;Port=5432;Database=iam_service_test_db;User Id=postgres;Password=postgres;"
-          Features__PermissionBasedAuthEnabled: "true"
 
 
