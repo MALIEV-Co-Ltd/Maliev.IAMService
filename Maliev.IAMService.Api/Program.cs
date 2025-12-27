@@ -161,6 +161,18 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 50
             }));
 
+    // Custom policy for token endpoints (stricter)
+    options.AddPolicy("token_limit", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "token_limit",
+            factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         // Exempt registration and health checks from global limiting
@@ -171,13 +183,13 @@ builder.Services.AddRateLimiter(options =>
         }
 
         return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: "token_limit",
+            partitionKey: "global_limit",
             factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = 100,
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
+                QueueLimit = 10
             });
     });
 });

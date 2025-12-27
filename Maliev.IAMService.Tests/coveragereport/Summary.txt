@@ -1,0 +1,109 @@
+Summary
+  Generated on: 21/12/2025 - 14:51:14
+  Coverage date: 21/12/2025 - 9:21:27 - 21/12/2025 - 14:51:05
+  Parser: MultiReport (2x Cobertura)
+  Assemblies: 3
+  Classes: 83
+  Files: 75
+  Line coverage: 59.8%
+  Covered lines: 3093
+  Uncovered lines: 2072
+  Coverable lines: 5165
+  Total lines: 8102
+  Branch coverage: 30.4% (325 of 1066)
+  Covered branches: 325
+  Total branches: 1066
+  Method coverage: 67.7% (305 of 450)
+  Full method coverage: 58.2% (262 of 450)
+  Covered methods: 305
+  Fully covered methods: 262
+  Total methods: 450
+
+Maliev.Aspire.ServiceDefaults                                                                                                                         17.1%
+  Maliev.Aspire.ServiceDefaults.Database.SnakeCaseNamingHelper                                                                                           0%
+  Microsoft.AspNetCore.OpenApi.Generated                                                                                                                 0%
+  Microsoft.Extensions.Hosting.ApiDocumentationExtensions                                                                                                0%
+  Microsoft.Extensions.Hosting.ApiVersioningExtensions                                                                                                   0%
+  Microsoft.Extensions.Hosting.AuthenticationExtensions                                                                                                  0%
+  Microsoft.Extensions.Hosting.CorsExtensions                                                                                                            0%
+  Microsoft.Extensions.Hosting.DatabaseExtensions                                                                                                       40%
+  Microsoft.Extensions.Hosting.Extensions                                                                                                             66.3%
+  Microsoft.Extensions.Hosting.MassTransitExtensions                                                                                                  64.9%
+  Microsoft.Extensions.Hosting.RedisExtensions                                                                                                        37.7%
+  Microsoft.Extensions.Hosting.SecretsExtensions                                                                                                         0%
+  System.Runtime.CompilerServices                                                                                                                        0%
+
+Maliev.IAMService.Api                                                                                                                                 54.6%
+  Maliev.IAMService.Api.Authorization.RequirePermissionAttribute                                                                                         0%
+  Maliev.IAMService.Api.Authorization.ServiceAccountAuthHandler                                                                                          0%
+  Maliev.IAMService.Api.Controllers.AuditController                                                                                                      0%
+  Maliev.IAMService.Api.Controllers.AuthController                                                                                                    74.3%
+  Maliev.IAMService.Api.Controllers.BindingsController                                                                                                 100%
+  Maliev.IAMService.Api.Controllers.PermissionsController                                                                                             90.3%
+  Maliev.IAMService.Api.Controllers.PrincipalsController                                                                                               100%
+  Maliev.IAMService.Api.Controllers.RolesController                                                                                                   83.8%
+  Maliev.IAMService.Api.Events.PrincipalRoleGrantedEventConsumer                                                                                       100%
+  Maliev.IAMService.Api.Events.PrincipalRoleRevokedEventConsumer                                                                                         0%
+  Maliev.IAMService.Api.Events.RoleUpdatedEventConsumer                                                                                                100%
+  Maliev.IAMService.Api.Models.Requests.AuditLogQueryRequest                                                                                             0%
+  Maliev.IAMService.Api.Models.Requests.CheckPermissionRequest                                                                                           0%
+  Maliev.IAMService.Api.Models.Requests.CreateCustomRoleRequest                                                                                        100%
+  Maliev.IAMService.Api.Models.Requests.CreateServiceAccountRequest                                                                                    100%
+  Maliev.IAMService.Api.Models.Requests.GrantRoleRequest                                                                                               100%
+  Maliev.IAMService.Api.Models.Requests.IssueTokenRequest                                                                                              100%
+  Maliev.IAMService.Api.Models.Requests.PermissionDto                                                                                                  100%
+  Maliev.IAMService.Api.Models.Requests.RefreshTokenRequest                                                                                            100%
+  Maliev.IAMService.Api.Models.Requests.RegisterPermissionsRequest                                                                                     100%
+  Maliev.IAMService.Api.Models.Requests.RegisterRolesRequest                                                                                           100%
+  Maliev.IAMService.Api.Models.Requests.ResolvePermissionsRequest                                                                                      100%
+  Maliev.IAMService.Api.Models.Requests.RevokeRoleRequest                                                                                                0%
+  Maliev.IAMService.Api.Models.Requests.RoleDto                                                                                                        100%
+  Maliev.IAMService.Api.Models.Requests.UpdateRoleRequest                                                                                              100%
+  Maliev.IAMService.Api.Models.Responses.AuditLogEntryResponse                                                                                           0%
+  Maliev.IAMService.Api.Models.Responses.CheckPermissionResponse                                                                                         0%
+  Maliev.IAMService.Api.Models.Responses.EffectivePermissionDto                                                                                          0%
+  Maliev.IAMService.Api.Models.Responses.EffectivePermissionsResponse                                                                                  100%
+  Maliev.IAMService.Api.Models.Responses.PermissionResponse                                                                                            100%
+  Maliev.IAMService.Api.Models.Responses.ResolvePermissionsResponse                                                                                    100%
+  Maliev.IAMService.Api.Models.Responses.RoleBindingResponse                                                                                           100%
+  Maliev.IAMService.Api.Models.Responses.RoleResponse                                                                                                  100%
+  Maliev.IAMService.Api.Models.Responses.RotateApiKeyResponse                                                                                          100%
+  Maliev.IAMService.Api.Models.Responses.ServiceAccountResponse                                                                                        100%
+  Maliev.IAMService.Api.Models.Responses.TokenResponse                                                                                                 100%
+  Maliev.IAMService.Api.Services.AuditService                                                                                                         86.6%
+  Maliev.IAMService.Api.Services.BindingService                                                                                                       98.3%
+  Maliev.IAMService.Api.Services.CacheService                                                                                                         74.4%
+  Maliev.IAMService.Api.Services.PermissionResolver                                                                                                   62.6%
+  Maliev.IAMService.Api.Services.PermissionService                                                                                                    97.6%
+  Maliev.IAMService.Api.Services.PrincipalService                                                                                                     61.9%
+  Maliev.IAMService.Api.Services.RoleService                                                                                                            95%
+  Maliev.IAMService.Api.Services.TokenService                                                                                                         92.7%
+  Maliev.IAMService.Api.Validators.PermissionFormatValidator                                                                                          83.3%
+  Microsoft.AspNetCore.OpenApi.Generated                                                                                                               0.5%
+  Program                                                                                                                                             87.7%
+  System.Runtime.CompilerServices                                                                                                                        0%
+  System.Text.RegularExpressions.Generated                                                                                                            79.5%
+  System.Text.RegularExpressions.Generated.<RegexGenerator_g>FE4307464B97DC42F69CEE5AF63DD3D9137252C9335D6FE58DFABF19E19C0C377__PermissionPattern_0   78.8%
+
+Maliev.IAMService.Data                                                                                                                                90.1%
+  Maliev.IAMService.Data.Configurations.SnakeCaseNamingExtensions                                                                                      100%
+  Maliev.IAMService.Data.Entities.IAMAuditLog                                                                                                           60%
+  Maliev.IAMService.Data.Entities.Permission                                                                                                           100%
+  Maliev.IAMService.Data.Entities.Principal                                                                                                             70%
+  Maliev.IAMService.Data.Entities.PrincipalRoleBinding                                                                                                  90%
+  Maliev.IAMService.Data.Entities.Role                                                                                                                  90%
+  Maliev.IAMService.Data.Entities.RolePermission                                                                                                       100%
+  Maliev.IAMService.Data.Entities.ServiceAccountApiKey                                                                                                77.7%
+  Maliev.IAMService.Data.IAMDbContext                                                                                                                  100%
+  Maliev.IAMService.Data.IAMDbContextFactory                                                                                                             0%
+  Maliev.IAMService.Data.Migrations.IAMDbContextModelSnapshot                                                                                          100%
+  Maliev.IAMService.Data.Migrations.InitialCreate                                                                                                     97.5%
+  Maliev.IAMService.Data.Repositories.AuditRepository                                                                                                 42.8%
+  Maliev.IAMService.Data.Repositories.BindingRepository                                                                                               77.4%
+  Maliev.IAMService.Data.Repositories.PermissionRepository                                                                                            64.2%
+  Maliev.IAMService.Data.Repositories.PrincipalRepository                                                                                             57.1%
+  Maliev.IAMService.Data.Repositories.RoleRepository                                                                                                    75%
+  Maliev.IAMService.Data.Repositories.ServiceAccountApiKeyRepository                                                                                  53.1%
+  System.Text.RegularExpressions.Generated                                                                                                            74.6%
+  System.Text.RegularExpressions.Generated.<RegexGenerator_g>F3AE821171363F1288B3249782C02183DC6C2BE5FC1F4046CF5B7234A86CDDDCB__MyRegex_0             72.5%
+  System.Text.RegularExpressions.Generated.<RegexGenerator_g>F3AE821171363F1288B3249782C02183DC6C2BE5FC1F4046CF5B7234A86CDDDCB__MyRegex1_1            75.3%
