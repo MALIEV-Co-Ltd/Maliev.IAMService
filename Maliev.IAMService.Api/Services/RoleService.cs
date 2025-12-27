@@ -315,21 +315,9 @@ public class RoleService : IRoleService
 
         // T116: Publish role updated event
         var roleUpdatedEvent = new RoleUpdatedEvent(
-            MessageId: Guid.NewGuid(),
-            MessageName: nameof(RoleUpdatedEvent),
-            MessageType: MessageType.Event,
-            MessageVersion: "1.0",
-            PublishedBy: "iam-service",
-            ConsumedBy: new[] { "all-services" },
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            IsPublic: true,
-            Payload: new RoleUpdatedEventPayload(
-                RoleId: roleId,
-                ServiceName: role.ServiceName ?? string.Empty,
-                UpdatedAt: DateTimeOffset.UtcNow
-            )
+            RoleId: roleId,
+            ServiceName: role.ServiceName ?? string.Empty,
+            UpdatedAt: DateTimeOffset.UtcNow
         );
         await _publishEndpoint.Publish(roleUpdatedEvent, cancellationToken);
 
