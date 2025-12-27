@@ -125,28 +125,14 @@ public class BindingService : IBindingService
         }, cancellationToken);
 
         // T068: Publish event
-        // Note: Event payload still uses ResourceType/ResourceId for backward compatibility with messaging contracts
-        // TODO: Update messaging contracts to use ResourcePath
         var principalRoleGrantedEvent = new PrincipalRoleGrantedEvent(
-            MessageId: Guid.NewGuid(),
-            MessageName: nameof(PrincipalRoleGrantedEvent),
-            MessageType: MessageType.Event,
-            MessageVersion: "1.0",
-            PublishedBy: "iam-service",
-            ConsumedBy: new[] { "all-services" },
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            IsPublic: true,
-            Payload: new PrincipalRoleGrantedEventPayload(
-                BindingId: created.BindingId,
-                PrincipalId: created.PrincipalId,
-                RoleId: created.RoleId,
-                ResourceType: string.Empty, // Deprecated - use ResourcePath in v2
-                ResourceId: created.ResourcePath ?? string.Empty, // Temporarily storing ResourcePath in ResourceId field
-                GrantedAt: new DateTimeOffset(created.GrantedAt, TimeSpan.Zero),
-                ExpiresAt: created.ExpiresAt.HasValue ? new DateTimeOffset(created.ExpiresAt.Value, TimeSpan.Zero) : DateTimeOffset.MaxValue
-            )
+            BindingId: created.BindingId,
+            PrincipalId: created.PrincipalId,
+            RoleId: created.RoleId,
+            ResourceType: string.Empty, // Empty for backward compatibility
+            ResourceId: created.ResourcePath ?? string.Empty, // Using ResourcePath as ResourceId for now
+            GrantedAt: new DateTimeOffset(created.GrantedAt, TimeSpan.Zero),
+            ExpiresAt: created.ExpiresAt.HasValue ? new DateTimeOffset(created.ExpiresAt.Value, TimeSpan.Zero) : DateTimeOffset.MaxValue
         );
         await _publishEndpoint.Publish(principalRoleGrantedEvent, cancellationToken);
 
@@ -180,22 +166,10 @@ public class BindingService : IBindingService
 
         // T069: Publish event
         var principalRoleRevokedEvent = new PrincipalRoleRevokedEvent(
-            MessageId: Guid.NewGuid(),
-            MessageName: nameof(PrincipalRoleRevokedEvent),
-            MessageType: MessageType.Event,
-            MessageVersion: "1.0",
-            PublishedBy: "iam-service",
-            ConsumedBy: new[] { "all-services" },
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            IsPublic: true,
-            Payload: new PrincipalRoleRevokedEventPayload(
-                BindingId: bindingId,
-                PrincipalId: principalId,
-                RoleId: binding.RoleId,
-                RevokedAt: DateTimeOffset.UtcNow
-            )
+            BindingId: bindingId,
+            PrincipalId: principalId,
+            RoleId: binding.RoleId,
+            RevokedAt: DateTimeOffset.UtcNow
         );
         await _publishEndpoint.Publish(principalRoleRevokedEvent, cancellationToken);
 

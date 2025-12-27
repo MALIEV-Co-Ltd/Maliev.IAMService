@@ -124,23 +124,11 @@ public class PermissionService : IPermissionService
             foreach (var permission in permissionsToCreate)
             {
                 var permissionRegisteredEvent = new PermissionRegisteredEvent(
-                    MessageId: Guid.NewGuid(),
-                    MessageName: nameof(PermissionRegisteredEvent),
-                    MessageType: MessageType.Event,
-                    MessageVersion: "1.0",
-                    PublishedBy: "iam-service",
-                    ConsumedBy: new[] { "all-services" },
-                    CorrelationId: Guid.NewGuid(),
-                    CausationId: null,
-                    OccurredAtUtc: DateTimeOffset.UtcNow,
-                    IsPublic: true,
-                    Payload: new PermissionRegisteredEventPayload(
-                        PermissionId: permission.PermissionId,
-                        ServiceName: permission.ServiceName,
-                        ResourceType: permission.ResourceType,
-                        Action: permission.Action,
-                        RegisteredAt: new DateTimeOffset(permission.RegisteredAt, TimeSpan.Zero)
-                    )
+                    PermissionId: permission.PermissionId,
+                    ServiceName: permission.ServiceName,
+                    ResourceType: permission.ResourceType,
+                    Action: permission.Action,
+                    RegisteredAt: new DateTimeOffset(permission.RegisteredAt, TimeSpan.Zero)
                 );
                 await _publishEndpoint.Publish(permissionRegisteredEvent, CancellationToken.None);
             }
