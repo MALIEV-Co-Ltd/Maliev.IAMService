@@ -41,6 +41,8 @@ builder.Services.AddScoped<IAuditRepository, AuditRepository>();
 builder.Services.AddScoped<IServiceAccountApiKeyRepository, ServiceAccountApiKeyRepository>();
 
 // ===== Infrastructure Services =====
+// RSA key provider as Singleton to ensure consistent JWT signing key across all requests
+builder.Services.AddSingleton<IRsaKeyProvider, RsaKeyProvider>();
 builder.Services.AddScoped<IPrincipalService, PrincipalService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();

@@ -60,8 +60,9 @@ public class TokenService : ITokenService
     private readonly IAuditService _auditService;
     private readonly ILogger<TokenService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IRsaKeyProvider _rsaKeyProvider;
 
-    // T141: RSA key pair for signing (2048-bit)
+    // T141: RSA key pair for signing (2048-bit) - provided by singleton IRsaKeyProvider
     private readonly RSA _rsa;
     private readonly RsaSecurityKey _signingKey;
     private readonly string _issuer;
@@ -75,6 +76,7 @@ public class TokenService : ITokenService
         ICacheService cacheService,
         IAuditService auditService,
         IConfiguration configuration,
+        IRsaKeyProvider rsaKeyProvider,
         ILogger<TokenService> logger)
     {
         _permissionResolver = permissionResolver;
@@ -83,15 +85,16 @@ public class TokenService : ITokenService
         _cacheService = cacheService;
         _auditService = auditService;
         _configuration = configuration;
+        _rsaKeyProvider = rsaKeyProvider;
         _logger = logger;
 
         _issuer = configuration["Jwt:Issuer"] ?? "Maliev.IAMService";
         _audience = configuration["Jwt:Audience"] ?? "Maliev.Services";
         _defaultExpirationMinutes = configuration.GetValue<int>("Jwt:DefaultExpirationMinutes", 60);
 
-        // T141: Initialize or load RSA key pair (2048-bit)
-        _rsa = LoadOrCreateRsaKey();
-        _signingKey = new RsaSecurityKey(_rsa);
+        // T141: Get RSA key pair from singleton provider (ensures consistency across requests)
+        _rsa = _rsaKeyProvider.GetRsa();
+        _signingKey = _rsaKeyProvider.GetSigningKey();
     }
 
     /// <inheritdoc />
@@ -258,36 +261,6 @@ public class TokenService : ITokenService
     /// If key doesn't exist, a new RSA-2048 key pair is generated and logged for storage.
     /// </summary>
     /// <returns>RSA instance with loaded or generated key pair.</returns>
-    private RSA LoadOrCreateRsaKey()
-    {
-        var keyBase64 = _configuration["Jwt:PrivateKey"];
-
-        if (!string.IsNullOrEmpty(keyBase64))
-        {
-            try
-            {
-                var rsa = RSA.Create();
-                rsa.ImportRSAPrivateKey(Convert.FromBase64String(keyBase64), out _);
-                _logger.LogInformation("Loaded existing RSA private key for JWT signing");
-                return rsa;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to load RSA private key from configuration, generating new key");
-            }
-        }
-
-        // Generate new 2048-bit RSA key
-        var newRsa = RSA.Create(2048);
-        _logger.LogWarning("Generated new RSA key for JWT signing. This key should be persisted in configuration.");
-
-        // Log the private key (for development only - should be stored securely in production)
-        var privateKey = newRsa.ExportRSAPrivateKey();
-        var privateKeyBase64 = Convert.ToBase64String(privateKey);
-        _logger.LogInformation("RSA Private Key (Base64): {PrivateKey}", privateKeyBase64);
-
-        return newRsa;
-    }
 
     /// <summary>
     /// Generates a cryptographically secure refresh token using RNGCryptoServiceProvider.
