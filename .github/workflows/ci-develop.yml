@@ -19,15 +19,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.x'
+
+      - name: Switch to PackageReference for CI
+        run: |
+          # Replace ProjectReference with PackageReference in all service csproj files
+          for file in $(find . -name "*.csproj"); do
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
+          done
+          echo "Switched to PackageReference for ServiceDefaults"
 
       - name: Restore dependencies
         run: dotnet restore
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
       - name: Build
         run: dotnet build --no-restore --configuration Release
@@ -49,15 +60,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.x'
+
+      - name: Switch to PackageReference for CI
+        run: |
+          # Replace ProjectReference with PackageReference in all service csproj files
+          for file in $(find . -name "*.csproj"); do
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
+          done
+          echo "Switched to PackageReference for ServiceDefaults"
 
       - name: Restore dependencies
         run: dotnet restore
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
       - name: Check formatting
         run: dotnet format --verify-no-changes --verbosity diagnostic
@@ -68,15 +90,26 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.x'
+
+      - name: Switch to PackageReference for CI
+        run: |
+          # Replace ProjectReference with PackageReference in all service csproj files
+          for file in $(find . -name "*.csproj"); do
+            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
+          done
+          echo "Switched to PackageReference for ServiceDefaults"
 
       - name: Restore dependencies
         run: dotnet restore
+        env:
+          NUGET_USERNAME: ${{ github.actor }}
+          NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
       - name: Check for vulnerable packages
         run: dotnet list package --vulnerable --include-transitive
