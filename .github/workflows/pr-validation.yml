@@ -39,8 +39,8 @@ jobs:
       - name: Switch to PackageReference for CI
         run: |
           # Replace ProjectReference with PackageReference in all service csproj files
+          
           for file in $(find . -name "*.csproj"); do
-            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
           done
           echo "Switched to PackageReference for ServiceDefaults"
 
