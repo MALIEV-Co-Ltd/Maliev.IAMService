@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Maliev.MessagingContracts\Maliev.MessagingContracts\Maliev.MessagingContracts.csproj" />
+    <ProjectReference Include="..\..\Maliev.MessagingContracts\generated\csharp\Maliev.MessagingContracts.csproj" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
