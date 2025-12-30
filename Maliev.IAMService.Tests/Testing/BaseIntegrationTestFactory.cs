@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Diagnostics.CodeAnalysis;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
@@ -211,6 +212,7 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
     /// Cleans all data from the database while preserving schema.
     /// Queries the database schema dynamically to get all tables.
     /// </summary>
+    [SuppressMessage("Security", "EF1002:Gaps in SQL queries", Justification = "Table names are retrieved from information_schema and are safe.")]
     public async Task CleanDatabaseAsync()
     {
         // Explicitly close any existing connections and clear the pool
@@ -234,9 +236,7 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         {
             try
             {
-#pragma warning disable EF1002
                 await context.Database.ExecuteSqlRawAsync($"TRUNCATE TABLE \"{tableName}\" RESTART IDENTITY CASCADE");
-#pragma warning restore EF1002
             }
             catch (Npgsql.PostgresException ex) when (ex.SqlState == "42P01")
             {

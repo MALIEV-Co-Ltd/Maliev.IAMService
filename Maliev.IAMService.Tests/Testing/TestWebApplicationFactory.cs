@@ -1,5 +1,6 @@
 using Maliev.IAMService.Data;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 
@@ -13,10 +14,6 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
     {
         // Add permission-based authorization infrastructure for tests
         services.AddHttpContextAccessor();
-#pragma warning disable ASPDEPR006
-        services.AddSingleton<Microsoft.AspNetCore.Mvc.Infrastructure.IActionContextAccessor,
-                              Microsoft.AspNetCore.Mvc.Infrastructure.ActionContextAccessor>();
-#pragma warning restore ASPDEPR006
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddAuthorizationBuilder();
