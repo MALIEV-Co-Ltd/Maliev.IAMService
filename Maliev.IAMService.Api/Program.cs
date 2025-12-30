@@ -214,15 +214,8 @@ app.UseHttpsRedirection();
 app.UseRateLimiter();
 
 // Run migrations on startup
-try
-{
-    await app.MigrateDatabaseAsync<IAMDbContext>();
-    initTracker.MarkDatabaseMigrationsComplete();
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Error applying migrations: {ex.Message}");
-}
+await app.MigrateDatabaseAsync<IAMDbContext>();
+initTracker.MarkDatabaseMigrationsComplete();
 
 // ===== Authentication & Authorization =====
 app.UseAuthentication();
