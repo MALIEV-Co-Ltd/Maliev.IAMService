@@ -150,13 +150,6 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
                 };
             });
 
-            // Ensure MassTransit waits until started for tests to avoid race conditions
-            services.Configure<MassTransitHostOptions>(options =>
-            {
-                options.WaitUntilStarted = true;
-                options.StartTimeout = TimeSpan.FromSeconds(30);
-            });
-
             // Allow derived classes to add additional test services
             ConfigureAdditionalServices(services);
         });
