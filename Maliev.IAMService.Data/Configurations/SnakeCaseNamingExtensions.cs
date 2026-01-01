@@ -3,8 +3,15 @@ using System.Text.RegularExpressions;
 
 namespace Maliev.IAMService.Data.Configurations;
 
+/// <summary>
+/// Extension methods for configuring Entity Framework Core to use snake_case naming conventions.
+/// </summary>
 public static partial class SnakeCaseNamingExtensions
 {
+    /// <summary>
+    /// Configures the model builder to use snake_case naming for tables, columns, keys, and indexes.
+    /// </summary>
+    /// <param name="modelBuilder">The model builder instance.</param>
     public static void UseSnakeCaseNaming(this ModelBuilder modelBuilder)
     {
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

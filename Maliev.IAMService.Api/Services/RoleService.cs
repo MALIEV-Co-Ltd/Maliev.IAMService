@@ -95,6 +95,15 @@ public class RoleService : IRoleService
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<RoleService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoleService"/> class.
+    /// </summary>
+    /// <param name="roleRepository">The role repository.</param>
+    /// <param name="permissionRepository">The permission repository.</param>
+    /// <param name="cacheService">The cache service.</param>
+    /// <param name="auditService">The audit service.</param>
+    /// <param name="publishEndpoint">The publish endpoint.</param>
+    /// <param name="logger">The logger.</param>
     public RoleService(
         IRoleRepository roleRepository,
         IPermissionRepository permissionRepository,

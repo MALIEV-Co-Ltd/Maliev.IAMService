@@ -42,6 +42,11 @@ public class AuditService : IAuditService
     private readonly IAuditRepository _auditRepository;
     private readonly ILogger<AuditService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuditService"/> class.
+    /// </summary>
+    /// <param name="auditRepository">The audit repository.</param>
+    /// <param name="logger">The logger.</param>
     public AuditService(IAuditRepository auditRepository, ILogger<AuditService> logger)
     {
         _auditRepository = auditRepository;

@@ -62,6 +62,16 @@ public class BindingService : IBindingService
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<BindingService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BindingService"/> class.
+    /// </summary>
+    /// <param name="bindingRepository">The binding repository.</param>
+    /// <param name="roleRepository">The role repository.</param>
+    /// <param name="principalRepository">The principal repository.</param>
+    /// <param name="cacheService">The cache service.</param>
+    /// <param name="auditService">The audit service.</param>
+    /// <param name="publishEndpoint">The publish endpoint.</param>
+    /// <param name="logger">The logger.</param>
     public BindingService(
         IBindingRepository bindingRepository,
         IRoleRepository roleRepository,

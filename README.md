@@ -111,7 +111,7 @@ For local development, you'll need to provide connection strings to your Postgre
 
 ```bash
 # Set environment variables
-export ConnectionStrings__IAMDatabase="Host=localhost;Database=iam;Username=postgres;Password=postgres"
+export ConnectionStrings__IamDbContext="Host=localhost;Database=iam;Username=postgres;Password=postgres"
 export ConnectionStrings__Redis="localhost:6379"
 export RabbitMQ__Host="localhost"
 
@@ -172,7 +172,7 @@ dotnet run
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ConnectionStrings__IAMDatabase` | PostgreSQL connection string | Required |
+| `ConnectionStrings__IamDbContext` | PostgreSQL connection string | Required |
 | `ConnectionStrings__Redis` | Redis connection string | Required |
 | `RabbitMQ__Host` | RabbitMQ host | localhost |
 | `RabbitMQ__Username` | RabbitMQ username | guest |
@@ -194,7 +194,7 @@ docker build -t maliev/iam-service:latest .
 
 ```bash
 docker run -p 8080:8080 \
-  -e ConnectionStrings__IAMDatabase="Host=postgres;..." \
+  -e ConnectionStrings__IamDbContext="Host=postgres;..." \
   -e ConnectionStrings__Redis="redis:6379" \
   -e RabbitMQ__Host="rabbitmq" \
   maliev/iam-service:latest

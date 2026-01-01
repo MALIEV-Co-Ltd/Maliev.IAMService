@@ -10,11 +10,16 @@ public class IAMReadinessHealthCheck : IHealthCheck
 {
     private readonly IAMInitializationTracker _tracker;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IAMReadinessHealthCheck"/> class.
+    /// </summary>
+    /// <param name="tracker">The initialization tracker.</param>
     public IAMReadinessHealthCheck(IAMInitializationTracker tracker)
     {
         _tracker = tracker ?? throw new ArgumentNullException(nameof(tracker));
     }
 
+    /// <inheritdoc />
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
@@ -38,12 +43,28 @@ public class IAMInitializationTracker
     private bool _massTransitStarted;
     private bool _apiReady;
 
+    /// <summary>
+    /// Gets a value indicating whether the service is fully initialized.
+    /// </summary>
     public bool IsFullyInitialized => _databaseMigrationsComplete && _massTransitStarted && _apiReady;
 
+    /// <summary>
+    /// Marks database migrations as complete.
+    /// </summary>
     public void MarkDatabaseMigrationsComplete() => _databaseMigrationsComplete = true;
+    /// <summary>
+    /// Marks MassTransit as started.
+    /// </summary>
     public void MarkMassTransitStarted() => _massTransitStarted = true;
+    /// <summary>
+    /// Marks the API as ready.
+    /// </summary>
     public void MarkApiReady() => _apiReady = true;
 
+    /// <summary>
+    /// Gets a string description of the initialization progress.
+    /// </summary>
+    /// <returns>Progress description.</returns>
     public string GetProgress()
     {
         var steps = new List<string>();

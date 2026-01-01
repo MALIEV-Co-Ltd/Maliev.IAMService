@@ -128,6 +128,18 @@ public class PrincipalService : IPrincipalService
     private readonly ILogger<PrincipalService> _logger;
     private readonly IConfiguration _configuration;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PrincipalService"/> class.
+    /// </summary>
+    /// <param name="principalRepository">The principal repository.</param>
+    /// <param name="apiKeyRepository">The API key repository.</param>
+    /// <param name="bindingRepository">The binding repository.</param>
+    /// <param name="roleRepository">The role repository.</param>
+    /// <param name="permissionRepository">The permission repository.</param>
+    /// <param name="cacheService">The cache service.</param>
+    /// <param name="auditService">The audit service.</param>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="logger">The logger.</param>
     public PrincipalService(
         IPrincipalRepository principalRepository,
         IServiceAccountApiKeyRepository apiKeyRepository,

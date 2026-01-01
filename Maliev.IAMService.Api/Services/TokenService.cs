@@ -69,6 +69,17 @@ public class TokenService : ITokenService
     private readonly string _audience;
     private readonly int _defaultExpirationMinutes;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TokenService"/> class.
+    /// </summary>
+    /// <param name="permissionResolver">The permission resolver.</param>
+    /// <param name="principalService">The principal service.</param>
+    /// <param name="bindingRepository">The binding repository.</param>
+    /// <param name="cacheService">The cache service.</param>
+    /// <param name="auditService">The audit service.</param>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="rsaKeyProvider">The RSA key provider.</param>
+    /// <param name="logger">The logger.</param>
     public TokenService(
         IPermissionResolver permissionResolver,
         IPrincipalService principalService,

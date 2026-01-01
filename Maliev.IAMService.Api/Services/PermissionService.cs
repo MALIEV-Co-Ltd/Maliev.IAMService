@@ -60,6 +60,12 @@ public class PermissionService : IPermissionService
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<PermissionService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PermissionService"/> class.
+    /// </summary>
+    /// <param name="permissionRepository">The permission repository.</param>
+    /// <param name="publishEndpoint">The publish endpoint.</param>
+    /// <param name="logger">The logger.</param>
     public PermissionService(IPermissionRepository permissionRepository, IPublishEndpoint publishEndpoint, ILogger<PermissionService> logger)
     {
         _permissionRepository = permissionRepository;

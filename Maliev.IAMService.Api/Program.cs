@@ -30,7 +30,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<IAMReadinessHealthCheck>("iam_ready", tags: new[] { "ready" });
 
 // ===== Database Configuration =====
-builder.AddPostgresDbContext<IAMDbContext>("IAMDatabase");
+builder.AddPostgresDbContext<IAMDbContext>("IamDbContext");
 
 // ===== Repository Layer Registration =====
 builder.Services.AddScoped<IPrincipalRepository, PrincipalRepository>();
@@ -233,5 +233,8 @@ initTracker.MarkApiReady();
 
 app.Run();
 
-// Make Program class public for integration tests
+/// <summary>
+/// Main entry point for the application.
+/// Exposed for integration testing.
+/// </summary>
 public partial class Program { }

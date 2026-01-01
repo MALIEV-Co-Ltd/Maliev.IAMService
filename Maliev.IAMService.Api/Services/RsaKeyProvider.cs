@@ -29,6 +29,11 @@ public class RsaKeyProvider : IRsaKeyProvider
     private readonly RsaSecurityKey _signingKey;
     private readonly ILogger<RsaKeyProvider> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RsaKeyProvider"/> class.
+    /// </summary>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="logger">The logger.</param>
     public RsaKeyProvider(IConfiguration configuration, ILogger<RsaKeyProvider> logger)
     {
         _logger = logger;
@@ -36,8 +41,10 @@ public class RsaKeyProvider : IRsaKeyProvider
         _signingKey = new RsaSecurityKey(_rsa);
     }
 
+    /// <inheritdoc />
     public RSA GetRsa() => _rsa;
 
+    /// <inheritdoc />
     public RsaSecurityKey GetSigningKey() => _signingKey;
 
     private RSA LoadOrCreateRsaKey(IConfiguration configuration)

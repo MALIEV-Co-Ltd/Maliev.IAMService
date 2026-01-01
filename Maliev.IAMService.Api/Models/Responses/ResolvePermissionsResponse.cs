@@ -1,8 +1,17 @@
 namespace Maliev.IAMService.Api.Models.Responses;
 
+/// <summary>
+/// Represents a response containing resolved permissions for a principal.
+/// </summary>
 public record ResolvePermissionsResponse
 {
+    /// <summary>
+    /// Gets or sets the unique identifier of the principal.
+    /// </summary>
     public required Guid PrincipalId { get; init; }
+    /// <summary>
+    /// Gets or sets the list of permissions assigned to the principal.
+    /// </summary>
     public required List<string> Permissions { get; init; }
 
     /// <summary>
@@ -20,5 +29,8 @@ public record ResolvePermissionsResponse
     /// </summary>
     public DateTime? CacheUntil { get; init; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the result was retrieved from cache.
+    /// </summary>
     public required bool FromCache { get; init; }
 }

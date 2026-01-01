@@ -8,16 +8,29 @@ using Maliev.IAMService.Data.Repositories;
 
 namespace Maliev.IAMService.Api.Authorization;
 
+/// <summary>
+/// Options for service account authentication.
+/// </summary>
 public class ServiceAccountAuthOptions : AuthenticationSchemeOptions
 {
 }
 
 // T131: Service account authentication handler for API key validation
+/// <summary>
+/// Authentication handler for validating service account API keys.
+/// </summary>
 public class ServiceAccountAuthHandler : AuthenticationHandler<ServiceAccountAuthOptions>
 {
     private readonly IServiceAccountApiKeyRepository _apiKeyRepository;
     private readonly ILogger<ServiceAccountAuthHandler> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ServiceAccountAuthHandler"/> class.
+    /// </summary>
+    /// <param name="options">The options monitor.</param>
+    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="encoder">The URL encoder.</param>
+    /// <param name="apiKeyRepository">The API key repository.</param>
     public ServiceAccountAuthHandler(
         IOptionsMonitor<ServiceAccountAuthOptions> options,
         ILoggerFactory loggerFactory,
@@ -29,6 +42,7 @@ public class ServiceAccountAuthHandler : AuthenticationHandler<ServiceAccountAut
         _logger = loggerFactory.CreateLogger<ServiceAccountAuthHandler>();
     }
 
+    /// <inheritdoc />
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         // Check for Authorization header

@@ -4,20 +4,52 @@ using Maliev.IAMService.Data.Configurations;
 
 namespace Maliev.IAMService.Data;
 
+/// <summary>
+/// Database context for the IAM Service.
+/// </summary>
 public class IAMDbContext : DbContext
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IAMDbContext"/> class.
+    /// </summary>
+    /// <param name="options">The options for this context.</param>
     public IAMDbContext(DbContextOptions<IAMDbContext> options) : base(options)
     {
     }
 
+    /// <summary>
+    /// Gets or sets the Principals DbSet.
+    /// </summary>
     public DbSet<Principal> Principals { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the Permissions DbSet.
+    /// </summary>
     public DbSet<Permission> Permissions { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the Roles DbSet.
+    /// </summary>
     public DbSet<Role> Roles { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the RolePermissions DbSet.
+    /// </summary>
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the PrincipalRoleBindings DbSet.
+    /// </summary>
     public DbSet<PrincipalRoleBinding> PrincipalRoleBindings { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the ServiceAccountApiKeys DbSet.
+    /// </summary>
     public DbSet<ServiceAccountApiKey> ServiceAccountApiKeys { get; set; } = null!;
+    /// <summary>
+    /// Gets or sets the IAMAuditLogs DbSet.
+    /// </summary>
     public DbSet<IAMAuditLog> IAMAuditLogs { get; set; } = null!;
 
+    /// <summary>
+    /// Configures the model using the model builder.
+    /// </summary>
+    /// <param name="modelBuilder">The model builder instance.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

@@ -44,6 +44,12 @@ public class PermissionResolver : IPermissionResolver
     private readonly ILogger<PermissionResolver> _logger;
     private const int CacheTtlMinutes = 5;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PermissionResolver"/> class.
+    /// </summary>
+    /// <param name="bindingRepository">The binding repository.</param>
+    /// <param name="cacheService">The cache service.</param>
+    /// <param name="logger">The logger.</param>
     public PermissionResolver(
         IBindingRepository bindingRepository,
         ICacheService cacheService,

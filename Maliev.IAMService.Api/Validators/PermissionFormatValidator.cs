@@ -2,6 +2,10 @@ using System.Text.RegularExpressions;
 
 namespace Maliev.IAMService.Api.Validators;
 
+/// <summary>
+/// Validator for permission ID formats.
+/// Enforces {service}.{resource}.{action} format (e.g., "user-service.profile.update").
+/// </summary>
 public static partial class PermissionFormatValidator
 {
     private static readonly Regex PermissionFormatRegex = PermissionPattern();
@@ -9,6 +13,11 @@ public static partial class PermissionFormatValidator
     [GeneratedRegex(@"^[a-z0-9-]+\.[a-z0-9-]+\.[a-z0-9-]+$", RegexOptions.Compiled)]
     private static partial Regex PermissionPattern();
 
+    /// <summary>
+    /// Checks if a permission ID is valid.
+    /// </summary>
+    /// <param name="permissionId">The permission ID to validate.</param>
+    /// <returns>True if the permission ID is valid; otherwise, false.</returns>
     public static bool IsValid(string permissionId)
     {
         if (string.IsNullOrWhiteSpace(permissionId))
@@ -25,6 +34,12 @@ public static partial class PermissionFormatValidator
         return parts.All(p => !string.IsNullOrWhiteSpace(p) && p.All(c => char.IsLower(c) || char.IsDigit(c) || c == '-'));
     }
 
+    /// <summary>
+    /// Parses a permission ID into its component parts.
+    /// </summary>
+    /// <param name="permissionId">The permission ID to parse.</param>
+    /// <returns>A tuple containing the service, resource, and action parts.</returns>
+    /// <exception cref="ArgumentException">Thrown if the permission ID is invalid.</exception>
     public static (string Service, string Resource, string Action) Parse(string permissionId)
     {
         if (!IsValid(permissionId))

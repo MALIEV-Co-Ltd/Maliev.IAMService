@@ -226,7 +226,7 @@ builder.AddServiceDefaults();
 // ===== STEP 2: Add Platform Infrastructure =====
 // PostgreSQL with EF Core (via ServiceDefaults extension)
 builder.AddPostgresDbContext<IAMDbContext>(
-    connectionStringName: "IAMDatabase",
+    connectionStringName: "IamDbContext",
     enableDynamicJson: false);
 
 // Redis distributed cache (via ServiceDefaults extension)
@@ -857,7 +857,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
 ```bash
 # Database
-ConnectionStrings__IAMDatabase=Host=postgres;Port=5432;Database=iam_service;...
+ConnectionStrings__IamDbContext=Host=postgres;Port=5432;Database=iam_service;...
 
 # Caching
 ConnectionStrings__Redis=redis:6379,ssl=false,abortConnect=false

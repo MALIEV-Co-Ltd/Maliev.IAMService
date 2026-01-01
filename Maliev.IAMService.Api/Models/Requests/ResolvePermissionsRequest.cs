@@ -1,7 +1,13 @@
 namespace Maliev.IAMService.Api.Models.Requests;
 
+/// <summary>
+/// Represents a request to resolve permissions for a principal.
+/// </summary>
 public record ResolvePermissionsRequest
 {
+    /// <summary>
+    /// Gets or sets the unique identifier of the principal.
+    /// </summary>
     public required Guid PrincipalId { get; init; }
 
     /// <summary>

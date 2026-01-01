@@ -8,7 +8,7 @@ namespace Maliev.IAMService.Tests.Testing;
 
 public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAMDbContext>
 {
-    protected override string DbConnectionStringName => "IAMDatabase";
+    protected override string DbConnectionStringName => "IamDbContext";
 
     protected override void ConfigureAdditionalServices(IServiceCollection services)
     {

@@ -1,7 +1,13 @@
 namespace Maliev.IAMService.Api.Models.Requests;
 
+/// <summary>
+/// Represents a request to grant a role to a principal.
+/// </summary>
 public record GrantRoleRequest
 {
+    /// <summary>
+    /// Gets or sets the unique identifier of the role.
+    /// </summary>
     public required string RoleId { get; init; }
 
     /// <summary>
@@ -11,5 +17,8 @@ public record GrantRoleRequest
     /// </summary>
     public string? ResourcePath { get; init; }
 
+    /// <summary>
+    /// Gets or sets the expiration date and time for the role grant.
+    /// </summary>
     public DateTime? ExpiresAt { get; init; }
 }

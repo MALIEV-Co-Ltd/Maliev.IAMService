@@ -65,6 +65,11 @@ public class CacheService : ICacheService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CacheService"/> class.
+    /// </summary>
+    /// <param name="cache">The distributed cache.</param>
+    /// <param name="logger">The logger.</param>
     public CacheService(IDistributedCache cache, ILogger<CacheService> logger)
     {
         _cache = cache;
