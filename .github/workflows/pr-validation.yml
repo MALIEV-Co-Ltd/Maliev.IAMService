@@ -1,4 +1,4 @@
-﻿name: PR Validation
+name: PR Validation
 
 on:
   pull_request:
@@ -38,31 +38,21 @@ jobs:
 
       - name: Switch to PackageReference for CI
         run: |
+          # Determine version format based on target branch
+          BASE_BRANCH="${{ github.base_ref }}"
+          if [ "$BASE_BRANCH" == "main" ]; then
+            VERSION_FORMAT="1.0.*"
+          else
+            VERSION_FORMAT="1.0.*-*"
+          fi
+          
+          echo "Target branch is $BASE_BRANCH. Using version format: $VERSION_FORMAT"
+          
           # Replace ProjectReference with PackageReference in all service csproj files
-          echo "Converting ProjectReferences to PackageReferences..."
-
           for file in $(find . -name "*.csproj"); do
-            echo "Processing $file"
-
-            # Backup
-            cp "$file" "$file.bak"
-
-            # Replace Aspire ServiceDefaults
-            sed -i 's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="1.0.*" />|g' "$file"
-
-            # Replace MessagingContracts (if present)
-            sed -i 's|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include="Maliev.MessagingContracts" Version="1.0.*" />|g' "$file"
-
-            # Verify changes
-            if grep -q "ProjectReference.*Maliev.Aspire.ServiceDefaults" "$file"; then
-              echo "ERROR: Failed to replace Aspire.ServiceDefaults in $file"
-              exit 1
-            fi
-
-            # Show diff
-            diff "$file.bak" "$file" || true
+            sed -i "s|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include=\"Maliev.Aspire.ServiceDefaults\" Version=\"$VERSION_FORMAT\" />|g" "$file"
+            sed -i "s|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include=\"Maliev.MessagingContracts\" Version=\"$VERSION_FORMAT\" />|g" "$file"
           done
-
           echo "Switched to PackageReference for ServiceDefaults and MessagingContracts"
 
       - name: Restore dependencies
