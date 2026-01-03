@@ -59,6 +59,8 @@ gha-creds-*.json
 # Test Outputs
 *test-output.txt
 *_error.txt
+*.log
+
 
 
 # Test Outputs

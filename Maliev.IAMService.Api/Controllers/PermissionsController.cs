@@ -39,7 +39,7 @@ public class PermissionsController : ControllerBase
     /// This endpoint is used by microservices during their startup phase to declare the granular permissions they define. 
     /// Permissions must follow the `{service}.{resource}.{action}` format.
     /// 
-    /// **Security:** This endpoint currently allows anonymous access in Development/Staging to facilitate easy service onboarding.
+    /// **Security:** This endpoint requires authorization to ensure only Maliev services can register permissions.
     /// </remarks>
     /// <param name="request">Permission registration request containing service name and permission definitions.</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
@@ -48,7 +48,7 @@ public class PermissionsController : ControllerBase
     /// <response code="400">If the permission format is invalid or service name mismatch occurs.</response>
     /// <response code="409">If a permission with the same ID already exists.</response>
     [HttpPost("register")]
-    [AllowAnonymous] // Allow services to register themselves in Dev. In Prod, this should be restricted.
+    [Authorize] // Restricted to authorized services/principals
     public async Task<IActionResult> RegisterPermissions([FromBody] RegisterPermissionsRequest request, CancellationToken cancellationToken)
     {
         try
