@@ -27,14 +27,14 @@ This is a .NET microservice project with the following structure:
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create solution structure with four projects: Api, Data, Tests, Contracts
-- [ ] T002 Configure NuGet package sources in nuget.config for Maliev.Aspire.ServiceDefaults
-- [ ] T003 [P] Add Maliev.Aspire.ServiceDefaults package reference to Maliev.IAMService.Api/Maliev.IAMService.Api.csproj
-- [ ] T004 [P] Add Entity Framework Core PostgreSQL packages to Maliev.IAMService.Data/Maliev.IAMService.Data.csproj
-- [ ] T005 [P] Add xUnit and Testcontainers packages to Maliev.IAMService.Tests/Maliev.IAMService.Tests.csproj
-- [ ] T006 [P] Configure appsettings.json with logging levels only (no secrets) in Maliev.IAMService.Api/appsettings.json
-- [ ] T007 [P] Create .gitignore for .NET projects
-- [ ] T008 [P] Create README.md with project overview and setup instructions
+- [x] T001 Create solution structure with four projects: Api, Data, Tests, Contracts
+- [x] T002 Configure NuGet package sources in nuget.config for Maliev.Aspire.ServiceDefaults
+- [x] T003 [P] Add Maliev.Aspire.ServiceDefaults package reference to Maliev.IAMService.Api/Maliev.IAMService.Api.csproj
+- [x] T004 [P] Add Entity Framework Core PostgreSQL packages to Maliev.IAMService.Data/Maliev.IAMService.Data.csproj
+- [x] T005 [P] Add xUnit and Testcontainers packages to Maliev.IAMService.Tests/Maliev.IAMService.Tests.csproj
+- [x] T006 [P] Configure appsettings.json with logging levels only (no secrets) in Maliev.IAMService.Api/appsettings.json
+- [x] T007 [P] Create .gitignore for .NET projects
+- [x] T008 [P] Create README.md with project overview and setup instructions
 
 ---
 
@@ -46,47 +46,47 @@ This is a .NET microservice project with the following structure:
 
 ### Database Infrastructure
 
-- [ ] T009 Create IAMDbContext with snake_case naming convention in Maliev.IAMService.Data/IAMDbContext.cs
-- [ ] T010 Configure EF Core snake_case extensions in Maliev.IAMService.Data/Configurations/SnakeCaseNamingExtensions.cs
-- [ ] T011 Create Principal entity in Maliev.IAMService.Data/Entities/Principal.cs
-- [ ] T012 [P] Create Permission entity in Maliev.IAMService.Data/Entities/Permission.cs
-- [ ] T013 [P] Create Role entity in Maliev.IAMService.Data/Entities/Role.cs
-- [ ] T014 [P] Create RolePermission entity in Maliev.IAMService.Data/Entities/RolePermission.cs
-- [ ] T015 [P] Create PrincipalRoleBinding entity in Maliev.IAMService.Data/Entities/PrincipalRoleBinding.cs
-- [ ] T016 [P] Create ServiceAccountApiKey entity in Maliev.IAMService.Data/Entities/ServiceAccountApiKey.cs
-- [ ] T017 [P] Create IAMAuditLog entity in Maliev.IAMService.Data/Entities/IAMAuditLog.cs
-- [ ] T018 Create initial EF Core migration with unique constraints on permission_id, service names, and role_id in Maliev.IAMService.Data/Migrations/
-- [ ] T019 Configure PostgreSQL DbContext in Program.cs using AddPostgresDbContext extension
+- [x] T009 Create IAMDbContext with snake_case naming convention in Maliev.IAMService.Data/IAMDbContext.cs
+- [x] T010 Configure EF Core snake_case extensions in Maliev.IAMService.Data/Configurations/SnakeCaseNamingExtensions.cs
+- [x] T011 Create Principal entity in Maliev.IAMService.Data/Entities/Principal.cs
+- [x] T012 [P] Create Permission entity in Maliev.IAMService.Data/Entities/Permission.cs
+- [x] T013 [P] Create Role entity in Maliev.IAMService.Data/Entities/Role.cs
+- [x] T014 [P] Create RolePermission entity in Maliev.IAMService.Data/Entities/RolePermission.cs
+- [x] T015 [P] Create PrincipalRoleBinding entity in Maliev.IAMService.Data/Entities/PrincipalRoleBinding.cs
+- [x] T016 [P] Create ServiceAccountApiKey entity in Maliev.IAMService.Data/Entities/ServiceAccountApiKey.cs
+- [x] T017 [P] Create IAMAuditLog entity in Maliev.IAMService.Data/Entities/IAMAuditLog.cs
+- [x] T018 Create initial EF Core migration with unique constraints on permission_id, service names, and role_id in Maliev.IAMService.Data/Migrations/
+- [x] T019 Configure PostgreSQL DbContext in Program.cs using AddPostgresDbContext extension
 
 ### Repository Layer
 
-- [ ] T020 Create IPrincipalRepository interface in Maliev.IAMService.Data/Repositories/IPrincipalRepository.cs
-- [ ] T021 Implement PrincipalRepository in Maliev.IAMService.Data/Repositories/PrincipalRepository.cs
-- [ ] T022 [P] Create IPermissionRepository interface in Maliev.IAMService.Data/Repositories/IPermissionRepository.cs
-- [ ] T023 [P] Implement PermissionRepository in Maliev.IAMService.Data/Repositories/PermissionRepository.cs
-- [ ] T024 [P] Create IRoleRepository interface in Maliev.IAMService.Data/Repositories/IRoleRepository.cs
-- [ ] T025 [P] Implement RoleRepository in Maliev.IAMService.Data/Repositories/RoleRepository.cs
-- [ ] T026 [P] Create IBindingRepository interface in Maliev.IAMService.Data/Repositories/IBindingRepository.cs
-- [ ] T027 [P] Implement BindingRepository in Maliev.IAMService.Data/Repositories/BindingRepository.cs
-- [ ] T028 [P] Create IAuditRepository interface in Maliev.IAMService.Data/Repositories/IAuditRepository.cs
-- [ ] T029 [P] Implement AuditRepository in Maliev.IAMService.Data/Repositories/IAuditRepository.cs
+- [x] T020 Create IPrincipalRepository interface in Maliev.IAMService.Data/Repositories/IPrincipalRepository.cs
+- [x] T021 Implement PrincipalRepository in Maliev.IAMService.Data/Repositories/PrincipalRepository.cs
+- [x] T022 [P] Create IPermissionRepository interface in Maliev.IAMService.Data/Repositories/IPermissionRepository.cs
+- [x] T023 [P] Implement PermissionRepository in Maliev.IAMService.Data/Repositories/PermissionRepository.cs
+- [x] T024 [P] Create IRoleRepository interface in Maliev.IAMService.Data/Repositories/IRoleRepository.cs
+- [x] T025 [P] Implement RoleRepository in Maliev.IAMService.Data/Repositories/RoleRepository.cs
+- [x] T026 [P] Create IBindingRepository interface in Maliev.IAMService.Data/Repositories/IBindingRepository.cs
+- [x] T027 [P] Implement BindingRepository in Maliev.IAMService.Data/Repositories/BindingRepository.cs
+- [x] T028 [P] Create IAuditRepository interface in Maliev.IAMService.Data/Repositories/IAuditRepository.cs
+- [x] T029 [P] Implement AuditRepository in Maliev.IAMService.Data/Repositories/IAuditRepository.cs
 
 ### Infrastructure Services
 
-- [ ] T030 Implement CacheService for Redis operations in Maliev.IAMService.Api/Services/CacheService.cs
-- [ ] T031 Configure Redis distributed cache in Program.cs using AddRedisDistributedCache extension
-- [ ] T032 Configure RabbitMQ with MassTransit in Program.cs using AddMassTransitWithRabbitMq extension
-- [ ] T033 Create IAM permission constants in Maliev.IAMService.Api/Authorization/Permissions.cs
-- [ ] T034 Configure JWT authentication in Program.cs using AddJwtAuthentication extension
-- [ ] T035 Implement PermissionFormatValidator in Maliev.IAMService.Api/Validators/PermissionFormatValidator.cs
-- [ ] T036 Configure API versioning, CORS, and OpenAPI in Program.cs
-- [ ] T037 Configure health checks and metrics endpoints in Program.cs using MapDefaultEndpoints
-- [ ] T038 [P] Implement AuditService for logging IAM operations in Maliev.IAMService.Api/Services/AuditService.cs
-- [ ] T039 [P] Implement PrincipalService for principal management in Maliev.IAMService.Api/Services/PrincipalService.cs
-- [ ] T040 [P] Configure global authentication requirement in Program.cs using RequireAuthorization policy
-- [ ] T041 [P] Verify ServiceDefaults observability configuration (structured logging, Prometheus, tracing) in Program.cs
-- [ ] T042 Create test setup with Testcontainers in Maliev.IAMService.Tests/Testing/TestContainersSetup.cs
-- [ ] T043 Create TestWebApplicationFactory in Maliev.IAMService.Tests/Testing/TestWebApplicationFactory.cs
+- [x] T030 Implement CacheService for Redis operations in Maliev.IAMService.Api/Services/CacheService.cs
+- [x] T031 Configure Redis distributed cache in Program.cs using AddRedisDistributedCache extension
+- [x] T032 Configure RabbitMQ with MassTransit in Program.cs using AddMassTransitWithRabbitMq extension
+- [x] T033 Create IAM permission constants in Maliev.IAMService.Api/Authorization/Permissions.cs
+- [x] T034 Configure JWT authentication in Program.cs using AddJwtAuthentication extension
+- [x] T035 Implement PermissionFormatValidator in Maliev.IAMService.Api/Validators/PermissionFormatValidator.cs
+- [x] T036 Configure API versioning, CORS, and OpenAPI in Program.cs
+- [x] T037 Configure health checks and metrics endpoints in Program.cs using MapDefaultEndpoints
+- [x] T038 [P] Implement AuditService for logging IAM operations in Maliev.IAMService.Api/Services/AuditService.cs
+- [x] T039 [P] Implement PrincipalService for principal management in Maliev.IAMService.Api/Services/PrincipalService.cs
+- [x] T040 [P] Configure global authentication requirement in Program.cs using RequireAuthorization policy
+- [x] T041 [P] Verify ServiceDefaults observability configuration (structured logging, Prometheus, tracing) in Program.cs
+- [x] T042 Create test setup with Testcontainers in Maliev.IAMService.Tests/Testing/BaseIntegrationTestFactory.cs
+- [x] T043 Create TestWebApplicationFactory in Maliev.IAMService.Tests/Testing/TestWebApplicationFactory.cs
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -100,20 +100,20 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 1
 
-- [ ] T044 [P] [US1] Create RegisterPermissionsRequest DTO in Maliev.IAMService.Api/Models/Requests/RegisterPermissionsRequest.cs
-- [ ] T045 [P] [US1] Create RegisterRolesRequest DTO in Maliev.IAMService.Api/Models/Requests/RegisterRolesRequest.cs
-- [ ] T046 [P] [US1] Create PermissionResponse DTO in Maliev.IAMService.Api/Models/Responses/PermissionResponse.cs
-- [ ] T047 [P] [US1] Create RoleResponse DTO in Maliev.IAMService.Api/Models/Responses/RoleResponse.cs
-- [ ] T048 [US1] Implement PermissionService with registration logic in Maliev.IAMService.Api/Services/PermissionService.cs
-- [ ] T049 [US1] Implement RoleService with registration logic in Maliev.IAMService.Api/Services/RoleService.cs
-- [ ] T050 [US1] Create PermissionsController with POST /iam/v1/permissions/register endpoint in Maliev.IAMService.Api/Controllers/PermissionsController.cs
-- [ ] T051 [US1] Create RolesController with POST /iam/v1/roles/register endpoint in Maliev.IAMService.Api/Controllers/RolesController.cs
-- [ ] T052 [US1] Add GET /iam/v1/permissions endpoint for listing permissions in PermissionsController
-- [ ] T053 [US1] Add GET /iam/v1/roles endpoint for listing roles in RolesController
-- [ ] T054 [US1] Add validation for permission format {service}.{resource}.{action} and service name uniqueness in PermissionService
-- [ ] T055 [US1] Add duplicate permission ID conflict detection in PermissionService
-- [ ] T056 [US1] Add role ID uniqueness validation in RoleService
-- [ ] T057 [US1] Publish iam.permission-registered event to RabbitMQ in PermissionService
+- [x] T044 [P] [US1] Create RegisterPermissionsRequest DTO in Maliev.IAMService.Api/Models/Requests/RegisterPermissionsRequest.cs
+- [x] T045 [P] [US1] Create RegisterRolesRequest DTO in Maliev.IAMService.Api/Models/Requests/RegisterRolesRequest.cs
+- [x] T046 [P] [US1] Create PermissionResponse DTO in Maliev.IAMService.Api/Models/Responses/PermissionResponse.cs
+- [x] T047 [P] [US1] Create RoleResponse DTO in Maliev.IAMService.Api/Models/Responses/RoleResponse.cs
+- [x] T048 [US1] Implement PermissionService with registration logic in Maliev.IAMService.Api/Services/PermissionService.cs
+- [x] T049 [US1] Implement RoleService with registration logic in Maliev.IAMService.Api/Services/RoleService.cs
+- [x] T050 [US1] Create PermissionsController with POST /iam/v1/permissions/register endpoint in Maliev.IAMService.Api/Controllers/PermissionsController.cs
+- [x] T051 [US1] Create RolesController with POST /iam/v1/roles/register endpoint in Maliev.IAMService.Api/Controllers/RolesController.cs
+- [x] T052 [US1] Add GET /iam/v1/permissions endpoint for listing permissions in PermissionsController
+- [x] T053 [US1] Add GET /iam/v1/roles endpoint for listing roles in RolesController
+- [x] T054 [US1] Add validation for permission format {service}.{resource}.{action} and service name uniqueness in PermissionService
+- [x] T055 [US1] Add duplicate permission ID conflict detection in PermissionService
+- [x] T056 [US1] Add role ID uniqueness validation in RoleService
+- [x] T057 [US1] Publish iam.permission-registered event to RabbitMQ in PermissionService
 
 **Checkpoint**: At this point, microservices can register permissions and roles, and they are stored and queryable
 
@@ -129,20 +129,20 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 2
 
-- [ ] T058 [P] [US2] Create GrantRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/GrantRoleRequest.cs
-- [ ] T059 [P] [US2] Create RevokeRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/RevokeRoleRequest.cs
-- [ ] T060 [P] [US2] Create RoleBindingResponse DTO in Maliev.IAMService.Api/Models/Responses/RoleBindingResponse.cs
-- [ ] T061 [US2] Implement BindingService with grant/revoke logic in Maliev.IAMService.Api/Services/BindingService.cs
-- [ ] T062 [US2] Create BindingsController with POST /iam/v1/principals/{principalId}/roles endpoint in Maliev.IAMService.Api/Controllers/BindingsController.cs
-- [ ] T063 [US2] Add DELETE /iam/v1/principals/{principalId}/roles/{bindingId} endpoint in BindingsController
-- [ ] T064 [US2] Add GET /iam/v1/principals/{principalId}/roles endpoint for listing bindings in BindingsController
-- [ ] T065 [US2] Implement duplicate binding detection (same principal, role, resource scope) in BindingService
-- [ ] T066 [US2] Implement expiration date handling for time-limited grants in BindingService
-- [ ] T067 [US2] Implement cache invalidation for iam:principal:{principalId}:* on grant/revoke in BindingService
-- [ ] T068 [US2] Publish iam.principal-role-granted event to RabbitMQ in BindingService
-- [ ] T069 [US2] Publish iam.principal-role-revoked event to RabbitMQ in BindingService
-- [ ] T070 [US2] Add audit logging for all grant/revoke operations in BindingService
-- [ ] T071 [US2] Implement RequirePermissionAttribute authorization filter in Maliev.IAMService.Api/Authorization/RequirePermissionAttribute.cs
+- [x] T058 [P] [US2] Create GrantRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/GrantRoleRequest.cs
+- [x] T059 [P] [US2] Create RevokeRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/RevokeRoleRequest.cs
+- [x] T060 [P] [US2] Create RoleBindingResponse DTO in Maliev.IAMService.Api/Models/Responses/RoleBindingResponse.cs
+- [x] T061 [US2] Implement BindingService with grant/revoke logic in Maliev.IAMService.Api/Services/BindingService.cs
+- [x] T062 [US2] Create BindingsController with POST /iam/v1/principals/{principalId}/roles endpoint in Maliev.IAMService.Api/Controllers/BindingsController.cs
+- [x] T063 [US2] Add DELETE /iam/v1/principals/{principalId}/roles/{bindingId} endpoint in BindingsController
+- [x] T064 [US2] Add GET /iam/v1/principals/{principalId}/roles endpoint for listing bindings in BindingsController
+- [x] T065 [US2] Implement duplicate binding detection (same principal, role, resource scope) in BindingService
+- [x] T066 [US2] Implement expiration date handling for time-limited grants in BindingService
+- [x] T067 [US2] Implement cache invalidation for iam:principal:{principalId}:* on grant/revoke in BindingService
+- [x] T068 [US2] Publish iam.principal-role-granted event to RabbitMQ in BindingService
+- [x] T069 [US2] Publish iam.principal-role-revoked event to RabbitMQ in BindingService
+- [x] T070 [US2] Add audit logging for all grant/revoke operations in BindingService
+- [x] T071 [US2] Implement RequirePermissionAttribute authorization filter in Maliev.IAMService.Api/Authorization/RequirePermissionAttribute.cs
 
 **Checkpoint**: At this point, administrators can grant and revoke roles for users with global or resource-scoped access
 
@@ -168,25 +168,25 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 3
 
-- [ ] T079 [P] [US3] Create ResolvePermissionsRequest DTO in Maliev.IAMService.Api/Models/Requests/ResolvePermissionsRequest.cs
-- [ ] T080 [P] [US3] Create ResolvePermissionsResponse DTO in Maliev.IAMService.Api/Models/Responses/ResolvePermissionsResponse.cs
-- [ ] T081 [P] [US3] Create CheckPermissionRequest DTO in Maliev.IAMService.Api/Models/Requests/CheckPermissionRequest.cs
-- [ ] T082 [P] [US3] Create CheckPermissionResponse DTO in Maliev.IAMService.Api/Models/Responses/CheckPermissionResponse.cs
-- [ ] T083 [US3] Implement PermissionResolver with caching and union resolution in Maliev.IAMService.Api/Services/PermissionResolver.cs
-- [ ] T084 [US3] Create AuthController with POST /iam/v1/auth/resolve-permissions endpoint in Maliev.IAMService.Api/Controllers/AuthController.cs
-- [ ] T085 [US3] Add POST /iam/v1/auth/check-permission endpoint in AuthController
-- [ ] T086 [US3] Implement Redis caching for resolved permissions (TTL: 5 minutes) in PermissionResolver
-- [ ] T087 [US3] Implement permission resolution algorithm for global roles in PermissionResolver
-- [ ] T088 [US3] Implement permission resolution algorithm for resource-scoped roles in PermissionResolver
-- [ ] T089 [US3] Implement hierarchical resource path parsing and inheritance in PermissionResolver
-- [ ] T090 [US3] Implement union of permissions from multiple overlapping roles in PermissionResolver
-- [ ] T091 [US3] Add expired binding filtering in PermissionResolver
-- [ ] T092 [US3] Optimize permission check to <10ms using cached data in PermissionResolver
-- [ ] T093 [US3] Add Prometheus metrics for permission check latency in AuthController
-- [ ] T094 [US3] Add cache hit/miss metrics in PermissionResolver
-- [ ] T095 [US3] Create RabbitMQ consumer for iam.principal-role-granted events to invalidate cache in Maliev.IAMService.Api/Events/PermissionChangedEventConsumer.cs
-- [ ] T096 [US3] Create RabbitMQ consumer for iam.principal-role-revoked events to invalidate cache in PermissionChangedEventConsumer
-- [ ] T097 [US3] Create RabbitMQ consumer for iam.role-updated events to invalidate all principal caches in Maliev.IAMService.Api/Events/RoleUpdatedEventConsumer.cs
+- [x] T079 [P] [US3] Create ResolvePermissionsRequest DTO in Maliev.IAMService.Api/Models/Requests/ResolvePermissionsRequest.cs
+- [x] T080 [P] [US3] Create ResolvePermissionsResponse DTO in Maliev.IAMService.Api/Models/Responses/ResolvePermissionsResponse.cs
+- [x] T081 [P] [US3] Create CheckPermissionRequest DTO in Maliev.IAMService.Api/Models/Requests/CheckPermissionRequest.cs
+- [x] T082 [P] [US3] Create CheckPermissionResponse DTO in Maliev.IAMService.Api/Models/Responses/CheckPermissionResponse.cs
+- [x] T083 [US3] Implement PermissionResolver with caching and union resolution in Maliev.IAMService.Api/Services/PermissionResolver.cs
+- [x] T084 [US3] Create AuthController with POST /iam/v1/auth/resolve-permissions endpoint in Maliev.IAMService.Api/Controllers/AuthController.cs
+- [x] T085 [US3] Add POST /iam/v1/auth/check-permission endpoint in AuthController
+- [x] T086 [US3] Implement Redis caching for resolved permissions (TTL: 5 minutes) in PermissionResolver
+- [x] T087 [US3] Implement permission resolution algorithm for global roles in PermissionResolver
+- [x] T088 [US3] Implement permission resolution algorithm for resource-scoped roles in PermissionResolver
+- [x] T089 [US3] Implement hierarchical resource path parsing and inheritance in PermissionResolver
+- [x] T090 [US3] Implement union of permissions from multiple overlapping roles in PermissionResolver
+- [x] T091 [US3] Add expired binding filtering in PermissionResolver
+- [x] T092 [US3] Optimize permission check to <10ms using cached data in PermissionResolver
+- [x] T093 [US3] Add Prometheus metrics for permission check latency in AuthController
+- [x] T094 [US3] Add cache hit/miss metrics in PermissionResolver
+- [x] T095 [US3] Create RabbitMQ consumer for iam.principal-role-granted events to invalidate cache in Maliev.IAMService.Api/Events/PermissionChangedEventConsumer.cs
+- [x] T096 [US3] Create RabbitMQ consumer for iam.principal-role-revoked events to invalidate cache in PermissionChangedEventConsumer
+- [x] T097 [US3] Create RabbitMQ consumer for iam.role-updated events to invalidate all principal caches in Maliev.IAMService.Api/Events/RoleUpdatedEventConsumer.cs
 
 **Checkpoint**: At this point, microservices can resolve user permissions with <10ms latency. MVP CORE COMPLETE!
 
@@ -200,15 +200,15 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 4
 
-- [ ] T098 [P] [US4] Create AuditLogQueryRequest DTO in Maliev.IAMService.Api/Models/Requests/AuditLogQueryRequest.cs
-- [ ] T099 [P] [US4] Create AuditLogEntryResponse DTO in Maliev.IAMService.Api/Models/Responses/AuditLogEntryResponse.cs
-- [ ] T100 [US4] Create AuditController with GET /iam/v1/audit/logs endpoint in Maliev.IAMService.Api/Controllers/AuditController.cs
-- [ ] T101 [US4] Implement date range filtering in AuditRepository
-- [ ] T102 [US4] Implement principal ID filtering in AuditRepository
-- [ ] T103 [US4] Implement action type filtering in AuditRepository
-- [ ] T104 [US4] Add pagination support for audit log queries in AuditController
-- [ ] T105 [US4] Implement JSONB details field for before/after states in AuditService
-- [ ] T106 [US4] Add audit log retention policy (90 days) documentation
+- [x] T098 [P] [US4] Create AuditLogQueryRequest DTO in Maliev.IAMService.Api/Models/Requests/AuditLogQueryRequest.cs
+- [x] T099 [P] [US4] Create AuditLogEntryResponse DTO in Maliev.IAMService.Api/Models/Responses/AuditLogEntryResponse.cs
+- [x] T100 [US4] Create AuditController with GET /iam/v1/audit/logs endpoint in Maliev.IAMService.Api/Controllers/AuditController.cs
+- [x] T101 [US4] Implement date range filtering in AuditRepository
+- [x] T102 [US4] Implement principal ID filtering in AuditRepository
+- [x] T103 [US4] Implement action type filtering in AuditRepository
+- [x] T104 [US4] Add pagination support for audit log queries in AuditController
+- [x] T105 [US4] Implement JSONB details field for before/after states in AuditService
+- [x] T106 [US4] Add audit log retention policy (90 days) documentation
 
 **Checkpoint**: At this point, all IAM operations are auditable and queryable by security officers
 
@@ -222,19 +222,19 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 5
 
-- [ ] T107 [P] [US5] Create CreateCustomRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/CreateCustomRoleRequest.cs
-- [ ] T108 [P] [US5] Create UpdateRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/UpdateRoleRequest.cs
-- [ ] T109 [US5] Add POST /iam/v1/roles endpoint for creating custom roles in RolesController
-- [ ] T110 [US5] Add PUT /iam/v1/roles/{roleId} endpoint for updating roles in RolesController
-- [ ] T111 [US5] Add DELETE /iam/v1/roles/{roleId} endpoint for deleting roles in RolesController
-- [ ] T112 [US5] Implement custom role creation with permission selection in RoleService
-- [ ] T113 [US5] Implement role update logic (add/remove permissions) in RoleService
-- [ ] T114 [US5] Implement role deletion with active binding check in RoleService
-- [ ] T115 [US5] Add validation preventing deletion of roles with active bindings in RoleService
-- [ ] T116 [US5] Publish iam.role-updated event when role permissions change in RoleService
-- [ ] T117 [US5] Implement cache invalidation for iam:role:{roleId} on update in RoleService
-- [ ] T118 [US5] Invalidate all principal permission caches when role is updated in RoleService
-- [ ] T119 [US5] Add audit logging for custom role operations in RoleService
+- [x] T107 [P] [US5] Create CreateCustomRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/CreateCustomRoleRequest.cs
+- [x] T108 [P] [US5] Create UpdateRoleRequest DTO in Maliev.IAMService.Api/Models/Requests/UpdateRoleRequest.cs
+- [x] T109 [US5] Add POST /iam/v1/roles endpoint for creating custom roles in RolesController
+- [x] T110 [US5] Add PUT /iam/v1/roles/{roleId} endpoint for updating roles in RolesController
+- [x] T111 [US5] Add DELETE /iam/v1/roles/{roleId} endpoint for deleting roles in RolesController
+- [x] T112 [US5] Implement custom role creation with permission selection in RoleService
+- [x] T113 [US5] Implement role update logic (add/remove permissions) in RoleService
+- [x] T114 [US5] Implement role deletion with active binding check in RoleService
+- [x] T115 [US5] Add validation preventing deletion of roles with active bindings in RoleService
+- [x] T116 [US5] Publish iam.role-updated event when role permissions change in RoleService
+- [x] T117 [US5] Implement cache invalidation for iam:role:{roleId} on update in RoleService
+- [x] T118 [US5] Invalidate all principal permission caches when role is updated in RoleService
+- [x] T119 [US5] Add audit logging for custom role operations in RoleService
 
 **Checkpoint**: At this point, administrators can create and manage custom roles with precise permission control
 
@@ -248,20 +248,20 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 6
 
-- [ ] T120 [P] [US6] Create CreateServiceAccountRequest DTO in Maliev.IAMService.Api/Models/Requests/CreateServiceAccountRequest.cs
-- [ ] T121 [P] [US6] Create ServiceAccountResponse DTO in Maliev.IAMService.Api/Models/Responses/ServiceAccountResponse.cs
-- [ ] T122 [P] [US6] Create RotateApiKeyResponse DTO in Maliev.IAMService.Api/Models/Responses/RotateApiKeyResponse.cs
-- [ ] T123 [US6] Extend PrincipalService with service account creation logic in Maliev.IAMService.Api/Services/PrincipalService.cs
-- [ ] T124 [US6] Create PrincipalsController with POST /iam/v1/service-accounts endpoint in Maliev.IAMService.Api/Controllers/PrincipalsController.cs
-- [ ] T125 [US6] Add POST /iam/v1/service-accounts/{id}/rotate-key endpoint in PrincipalsController
-- [ ] T126 [US6] Add GET /iam/v1/service-accounts endpoint for listing service accounts in PrincipalsController
-- [ ] T127 [US6] Implement API key generation (32 characters, 256-bit entropy) in PrincipalService
-- [ ] T128 [US6] Implement PBKDF2 hashing with HMACSHA256 for API keys in PrincipalService
-- [ ] T129 [US6] Store API key prefix (first 8 characters) for identification in PrincipalService
-- [ ] T130 [US6] Implement API key rotation with old key invalidation in PrincipalService
-- [ ] T131 [US6] Implement ServiceAccountAuthHandler for Bearer token validation in Maliev.IAMService.Api/Authorization/ServiceAccountAuthHandler.cs
-- [ ] T132 [US6] Add service account authentication to JWT middleware in Program.cs
-- [ ] T133 [US6] Add audit logging for service account operations in PrincipalService
+- [x] T120 [P] [US6] Create CreateServiceAccountRequest DTO in Maliev.IAMService.Api/Models/Requests/CreateServiceAccountRequest.cs
+- [x] T121 [P] [US6] Create ServiceAccountResponse DTO in Maliev.IAMService.Api/Models/Responses/ServiceAccountResponse.cs
+- [x] T122 [P] [US6] Create RotateApiKeyResponse DTO in Maliev.IAMService.Api/Models/Responses/RotateApiKeyResponse.cs
+- [x] T123 [US6] Extend PrincipalService with service account creation logic in Maliev.IAMService.Api/Services/PrincipalService.cs
+- [x] T124 [US6] Create PrincipalsController with POST /iam/v1/service-accounts endpoint in Maliev.IAMService.Api/Controllers/PrincipalsController.cs
+- [x] T125 [US6] Add POST /iam/v1/service-accounts/{id}/rotate-key endpoint in PrincipalsController
+- [x] T126 [US6] Add GET /iam/v1/service-accounts endpoint for listing service accounts in PrincipalsController
+- [x] T127 [US6] Implement API key generation (32 characters, 256-bit entropy) in PrincipalService
+- [x] T128 [US6] Implement PBKDF2 hashing with HMACSHA256 for API keys in PrincipalService
+- [x] T129 [US6] Store API key prefix (first 8 characters) for identification in PrincipalService
+- [x] T130 [US6] Implement API key rotation with old key invalidation in PrincipalService
+- [x] T131 [US6] Implement ServiceAccountAuthHandler for Bearer token validation in Maliev.IAMService.Api/Authorization/ServiceAccountAuthHandler.cs
+- [x] T132 [US6] Add service account authentication to JWT middleware in Program.cs
+- [x] T133 [US6] Add audit logging for service account operations in PrincipalService
 
 **Checkpoint**: At this point, service accounts can authenticate with API keys and access resources based on granted roles
 
@@ -275,21 +275,21 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 7
 
-- [ ] T134 [P] [US7] Create IssueTokenRequest DTO in Maliev.IAMService.Api/Models/Requests/IssueTokenRequest.cs
-- [ ] T135 [P] [US7] Create TokenResponse DTO in Maliev.IAMService.Api/Models/Responses/TokenResponse.cs
-- [ ] T136 [P] [US7] Create RefreshTokenRequest DTO in Maliev.IAMService.Api/Models/Requests/RefreshTokenRequest.cs
-- [ ] T137 [US7] Implement TokenService with RS256 signing in Maliev.IAMService.Api/Services/TokenService.cs
-- [ ] T138 [US7] Add POST /iam/v1/auth/token endpoint in AuthController
-- [ ] T139 [US7] Add POST /iam/v1/auth/refresh endpoint in AuthController
-- [ ] T140 [US7] Add GET /iam/v1/auth/.well-known/jwks.json endpoint in AuthController
-- [ ] T141 [US7] Implement 2048-bit RSA key pair generation for JWT signing in TokenService
-- [ ] T142 [US7] Implement JWT claims with principal_id, permissions, roles in TokenService
-- [ ] T143 [US7] Implement token expiration (configurable, default 60 minutes) in TokenService
-- [ ] T144 [US7] Implement refresh token generation and validation in TokenService
-- [ ] T145 [US7] Implement JWKS endpoint for public key distribution in AuthController
-- [ ] T146 [US7] Add rate limiting (10 req/min per principal) for token issuance in AuthController
-- [ ] T147 [US7] Add audit logging for token issuance in TokenService
-- [ ] T148 [US7] Add Prometheus metrics for token generation throughput in AuthController
+- [x] T134 [P] [US7] Create IssueTokenRequest DTO in Maliev.IAMService.Api/Models/Requests/IssueTokenRequest.cs
+- [x] T135 [P] [US7] Create TokenResponse DTO in Maliev.IAMService.Api/Models/Responses/TokenResponse.cs
+- [x] T136 [P] [US7] Create RefreshTokenRequest DTO in Maliev.IAMService.Api/Models/Requests/RefreshTokenRequest.cs
+- [x] T137 [US7] Implement TokenService with RS256 signing in Maliev.IAMService.Api/Services/TokenService.cs
+- [x] T138 [US7] Add POST /iam/v1/auth/token endpoint in AuthController
+- [x] T139 [US7] Add POST /iam/v1/auth/refresh endpoint in AuthController
+- [x] T140 [US7] Add GET /iam/v1/auth/.well-known/jwks.json endpoint in AuthController
+- [x] T141 [US7] Implement 2048-bit RSA key pair generation for JWT signing in TokenService
+- [x] T142 [US7] Implement JWT claims with principal_id, permissions, roles in TokenService
+- [x] T143 [US7] Implement token expiration (configurable, default 60 minutes) in TokenService
+- [x] T144 [US7] Implement refresh token generation and validation in TokenService
+- [x] T145 [US7] Implement JWKS endpoint for public key distribution in AuthController
+- [x] T146 [US7] Add rate limiting (10 req/min per principal) for token issuance in AuthController
+- [x] T147 [US7] Add audit logging for token issuance in TokenService
+- [x] T148 [US7] Add Prometheus metrics for token generation throughput in AuthController
 
 **Checkpoint**: At this point, JWT tokens include embedded permissions, enabling <10ms authorization checks in microservices
 
@@ -303,11 +303,11 @@ This is a .NET microservice project with the following structure:
 
 ### Implementation for User Story 8
 
-- [ ] T149 [P] [US8] Create EffectivePermissionsResponse DTO in Maliev.IAMService.Api/Models/Responses/EffectivePermissionsResponse.cs
-- [ ] T150 [US8] Add GET /iam/v1/principals/{principalId}/effective-permissions endpoint in PrincipalsController
-- [ ] T151 [US8] Implement effective permissions query with deduplication in PrincipalService
-- [ ] T152 [US8] Add resource scope marking for resource-scoped permissions in PrincipalService
-- [ ] T153 [US8] Add caching for effective permissions queries in PrincipalService
+- [x] T149 [P] [US8] Create EffectivePermissionsResponse DTO in Maliev.IAMService.Api/Models/Requests/EffectivePermissionsResponse.cs
+- [x] T150 [US8] Add GET /iam/v1/principals/{principalId}/effective-permissions endpoint in PrincipalsController
+- [x] T151 [US8] Implement effective permissions query with deduplication in PrincipalService
+- [x] T152 [US8] Add resource scope marking for resource-scoped permissions in PrincipalService
+- [x] T153 [US8] Add caching for effective permissions queries in PrincipalService
 
 **Checkpoint**: At this point, administrators can view and troubleshoot user permissions easily
 
@@ -341,7 +341,7 @@ This is a .NET microservice project with the following structure:
 - [ ] T164 [P] Create integration guide for microservices in docs/integration-guide.md
 - [ ] T165 [P] Create deployment runbook in docs/deployment.md
 - [ ] T166 [P] Create troubleshooting guide in docs/troubleshooting.md
-- [ ] T167 [P] Set up GitHub Actions CI/CD workflows in .github/workflows/
+- [x] T167 [P] Set up GitHub Actions CI/CD workflows in .github/workflows/
 
 ### Security & Performance
 

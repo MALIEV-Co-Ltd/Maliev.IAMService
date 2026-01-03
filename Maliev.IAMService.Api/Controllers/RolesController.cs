@@ -39,7 +39,7 @@ public class RolesController : ControllerBase
     /// Built-in roles are predefined by services and are generally immutable after registration.
     /// Each role must include a list of existing permission identifiers (e.g., `supplier.suppliers.read`).
     /// 
-    /// **Security:** Currently allows anonymous access in Dev/Staging for service onboarding.
+    /// **Security:** This endpoint requires authorization to ensure only Maliev services can register roles.
     /// </remarks>
     /// <param name="request">Role registration request containing service name and role definitions with permission mappings.</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
@@ -47,7 +47,7 @@ public class RolesController : ControllerBase
     /// <response code="200">Returns the registered role details.</response>
     /// <response code="400">If the role format is invalid or references non-existent permissions.</response>
     [HttpPost("register")]
-    [AllowAnonymous] // Allow services to register themselves in Dev. In Prod, this should be restricted.
+    [Authorize] // Restricted to authorized services/principals
     public async Task<IActionResult> RegisterRoles([FromBody] RegisterRolesRequest request, CancellationToken cancellationToken)
     {
         try
