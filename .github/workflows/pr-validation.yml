@@ -11,32 +11,16 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: iam_service_test_db
-          PGDATA: /var/lib/postgresql/data/pgdata
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Setup .NET 10.0
+      - name: Set up .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.x'
+          dotnet-version: "10.x"
 
-      - name: Switch to PackageReference for CI
+      - name: Switch to PackageReference for CI build
         run: |
           # Determine version format based on target branch
           BASE_BRANCH="${{ github.base_ref }}"
@@ -45,14 +29,16 @@ jobs:
           else
             VERSION_FORMAT="1.0.*-*"
           fi
-          
+
           echo "Target branch is $BASE_BRANCH. Using version format: $VERSION_FORMAT"
-          
+
           # Replace ProjectReference with PackageReference in all service csproj files
-          for file in $(find . -name "*.csproj"); do
-            sed -i "s|<ProjectReference Include=\".*Maliev.Aspire.ServiceDefaults.*.csproj\" />|<PackageReference Include=\"Maliev.Aspire.ServiceDefaults\" Version=\"$VERSION_FORMAT\" />|g" "$file"
-            sed -i "s|<ProjectReference Include=\".*Maliev.MessagingContracts.*.csproj\" />|<PackageReference Include=\"Maliev.MessagingContracts\" Version=\"$VERSION_FORMAT\" />|g" "$file"
-          done
+          find . -name "*.csproj" -type f -exec sed -i \
+            's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="'$VERSION_FORMAT'" />|g' \
+            {} \;
+          find . -name "*.csproj" -type f -exec sed -i \
+            's|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include="Maliev.MessagingContracts" Version="'$VERSION_FORMAT'" />|g' \
+            {} \;
           echo "Switched to PackageReference for ServiceDefaults and MessagingContracts"
 
       - name: Restore dependencies
@@ -61,12 +47,9 @@ jobs:
           NUGET_USERNAME: ${{ github.actor }}
           NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
-      - name: Build solution
+      - name: Build
         run: dotnet build Maliev.IAMService.sln --no-restore --configuration Release
 
-      - name: Run tests
+      - name: Test
         run: dotnet test Maliev.IAMService.sln --no-build --configuration Release --verbosity normal
-        env:
-          ConnectionStrings__IAMDbContext: "Server=localhost;Port=5432;Database=iam_service_test_db;User Id=postgres;Password=postgres;"
-
-
+        working-directory: ${{ github.workspace }}
