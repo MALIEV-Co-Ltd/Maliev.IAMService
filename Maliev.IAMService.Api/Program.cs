@@ -2,18 +2,11 @@ using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
 using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Api.Health;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography;
-using System.Text;
-using System.IdentityModel.Tokens.Jwt;
 using MassTransit;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
-using Scalar.AspNetCore;
+using Microsoft.EntityFrameworkCore;
 using Maliev.Aspire.ServiceDefaults;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +21,9 @@ builder.AddServiceMeters("iam-service");
 // ===== Custom IAM Readiness Health Check =====
 builder.Services.AddHealthChecks()
     .AddCheck<IAMReadinessHealthCheck>("iam_ready", tags: new[] { "ready" });
+
+// ===== IAM Initialization Hosted Service =====
+builder.Services.AddHostedService<IAMInitializationHostedService>();
 
 // ===== Database Configuration =====
 builder.AddPostgresDbContext<IAMDbContext>("IamDbContext");
@@ -54,7 +50,6 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 // ===== Authorization Infrastructure =====
 builder.Services.AddPermissionAuthorization();
 
-
 // ===== Redis Distributed Cache =====
 builder.AddRedisDistributedCache(instanceName: "iam:");
 builder.Services.AddScoped<ICacheService, CacheService>();
@@ -66,6 +61,7 @@ builder.AddMassTransitWithRabbitMq(x =>
     x.AddConsumer<Maliev.IAMService.Api.Events.PrincipalRoleGrantedEventConsumer>();
     x.AddConsumer<Maliev.IAMService.Api.Events.PrincipalRoleRevokedEventConsumer>();
     x.AddConsumer<Maliev.IAMService.Api.Events.RoleUpdatedEventConsumer>();
+    x.AddConsumer<Maliev.IAMService.Api.Consumers.PermissionRegistrationRequestConsumer>();
 });
 
 // --- API Configuration ---
@@ -73,72 +69,16 @@ builder.AddDefaultCors(); // CORS from CORS:AllowedOrigins config
 builder.AddDefaultApiVersioning(); // API versioning with URL segment reader
 
 // ===== JWT Authentication =====
-var jwtPrivateKey = builder.Configuration["Jwt:PrivateKey"];
-var jwtPublicKey = builder.Configuration["Jwt:PublicKey"];
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Maliev.IAMService";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Maliev.Services";
+// Use ServiceDefaults extension which supports both RSA (user tokens) and HMAC (service account tokens)
+builder.AddJwtAuthentication();
 
-RSA? rsaPrivate = null;
-if (!string.IsNullOrEmpty(jwtPrivateKey))
+// Configure default authorization policy
+builder.Services.AddAuthorization(options =>
 {
-    try
-    {
-        rsaPrivate = RSA.Create();
-        rsaPrivate.ImportRSAPrivateKey(Convert.FromBase64String(jwtPrivateKey), out _);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Warning: Failed to load Jwt:PrivateKey: {ex.Message}");
-    }
-}
-
-RSA? rsaPublic = null;
-if (!string.IsNullOrEmpty(jwtPublicKey))
-{
-    try
-    {
-        rsaPublic = RSA.Create();
-        // Handle both PEM and simple Base64 if needed, but standardizing on PEM as per ServiceDefaults
-        var publicKeyPem = Encoding.UTF8.GetString(Convert.FromBase64String(jwtPublicKey));
-        rsaPublic.ImportFromPem(publicKeyPem);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Warning: Failed to load Jwt:PublicKey: {ex.Message}");
-    }
-}
-
-// Add service account authentication handler
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = rsaPublic != null,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = rsaPublic != null ? new RsaSecurityKey(rsaPublic) : null,
-            ClockSkew = TimeSpan.FromMinutes(5)
-        };
-
-        // In development, if no public key is provided, allow any signature to prevent startup crash
-        if (builder.Environment.IsDevelopment() && rsaPublic == null)
-        {
-            options.TokenValidationParameters.SignatureValidator = delegate (string token, TokenValidationParameters parameters)
-            {
-                var handler = new JwtSecurityTokenHandler();
-                return handler.ReadJwtToken(token);
-            };
-        }
-    })
-    .AddScheme<Maliev.IAMService.Api.Authorization.ServiceAccountAuthOptions,
-               Maliev.IAMService.Api.Authorization.ServiceAccountAuthHandler>(
-        "ServiceAccount", options => { });
-
-builder.Services.AddAuthorization();
+    options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 // ===== OpenAPI with Scalar UI =====
 builder.AddStandardOpenApi(
@@ -148,20 +88,12 @@ builder.AddStandardOpenApi(
 // ===== Controllers =====
 builder.Services.AddControllers();
 
-// ===== Rate Limiting (10 requests per minute for token endpoints) =====
+// ===== Rate Limiting =====
 builder.Services.AddRateLimiter(options =>
 {
-    // Custom policy for registration (more lenient)
+    // Custom policy for registration (no limit for internal platform traffic)
     options.AddPolicy("registration_limit", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: "registration",
-            factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 100, // Allow burst during startup
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
-                QueueLimit = 50
-            }));
+        RateLimitPartition.GetNoLimiter("registration"));
 
     // Custom policy for token endpoints (stricter)
     options.AddPolicy("token_limit", httpContext =>
@@ -169,7 +101,7 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: "token_limit",
             factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = 100, // Increased for performance
                 Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
@@ -177,21 +109,19 @@ builder.Services.AddRateLimiter(options =>
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
-        // Exempt registration and health checks from global limiting
-        var path = httpContext.Request.Path.Value ?? string.Empty;
-        if (path.Contains("/register") || path.Contains("/liveness") || path.Contains("/readiness"))
+        // Platform internal traffic uses high limits
+        if (httpContext.Request.Headers.ContainsKey("X-Service-Name"))
         {
-            return RateLimitPartition.GetNoLimiter("no_limit");
+            return RateLimitPartition.GetNoLimiter("platform_internal");
         }
 
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: "global_limit",
             factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
             {
-                PermitLimit = 100,
+                PermitLimit = 500, // Relaxed for local dev/testing
                 Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
-                QueueLimit = 10
+                QueueLimit = 100
             });
     });
 });
@@ -208,7 +138,11 @@ app.MapDefaultEndpoints("iam");
 // Map OpenAPI and Scalar documentation (dev/staging only)
 app.MapApiDocumentation(servicePrefix: "iam");
 
-app.UseHttpsRedirection();
+// HTTPS redirection disabled in Development (Aspire uses HTTP for service-to-service)
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // ===== Rate Limiting =====
 app.UseRateLimiter();
@@ -221,15 +155,82 @@ initTracker.MarkDatabaseMigrationsComplete();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Seed geometry-service principal for integration tests (Development/Testing only)
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
+    var serviceName = "geometry-service";
+    var email = $"{serviceName}@serviceaccount.maliev.local";
+
+    // 1. Seed the permission first to satisfy FK constraint
+    var permissionId = "upload.files.upload";
+    if (!await dbContext.Permissions.AnyAsync(p => p.PermissionId == permissionId))
+    {
+        dbContext.Permissions.Add(new Maliev.IAMService.Data.Entities.Permission
+        {
+            PermissionId = permissionId,
+            ServiceName = "upload",
+            ResourceType = "files",
+            Action = "upload",
+            Description = "Upload files (Seed)",
+            RegisteredAt = DateTime.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+    }
+
+    // 2. Seed the principal
+    if (!await dbContext.Principals.AnyAsync(p => p.Email == email))
+    {
+        var principalId = Guid.NewGuid();
+        dbContext.Principals.Add(new Maliev.IAMService.Data.Entities.Principal
+        {
+            PrincipalId = principalId,
+            PrincipalType = "service_account",
+            Email = email,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        // 3. Grant upload.files.upload permission via a direct role binding
+        var roleId = "roles.system.geometry-service";
+        if (!await dbContext.Roles.AnyAsync(r => r.RoleId == roleId))
+        {
+            var role = new Maliev.IAMService.Data.Entities.Role
+            {
+                RoleId = roleId,
+                RoleName = "Geometry Service Role",
+                Description = "System role for geometry service",
+                ServiceName = "system",
+                IsCustom = false,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            dbContext.Roles.Add(role);
+
+            dbContext.RolePermissions.Add(new Maliev.IAMService.Data.Entities.RolePermission
+            {
+                RoleId = roleId,
+                PermissionId = permissionId,
+                AddedAt = DateTime.UtcNow
+            });
+        }
+
+        dbContext.PrincipalRoleBindings.Add(new Maliev.IAMService.Data.Entities.PrincipalRoleBinding
+        {
+            BindingId = Guid.NewGuid(),
+            PrincipalId = principalId,
+            RoleId = roleId,
+            GrantedBy = Guid.Empty,
+            GrantedAt = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+}
+
 // ===== Controller Routes =====
 app.MapControllers();
-
-// Mark initialization complete before app.Run()
-// By the time app.Run() is called, hosted services (including MassTransit) are configured
-// and will be started by the host. We mark them as "will be ready" so the health check
-// reports healthy once Kestrel starts listening.
-initTracker.MarkMassTransitStarted();
-initTracker.MarkApiReady();
 
 app.Run();
 

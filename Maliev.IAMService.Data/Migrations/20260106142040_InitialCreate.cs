@@ -120,8 +120,7 @@ namespace Maliev.IAMService.Data.Migrations
                     binding_id = table.Column<Guid>(type: "uuid", nullable: false),
                     principal_id = table.Column<Guid>(type: "uuid", nullable: false),
                     role_id = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
-                    resource_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    resource_id = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    resource_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     granted_by = table.Column<Guid>(type: "uuid", nullable: false),
                     granted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
@@ -217,9 +216,9 @@ namespace Maliev.IAMService.Data.Migrations
                 column: "principal_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_principal_role_bindings_principal_id_role_id_resource_type_~",
+                name: "IX_principal_role_bindings_principal_id_role_id_resource_path",
                 table: "principal_role_bindings",
-                columns: new[] { "principal_id", "role_id", "resource_type", "resource_id" },
+                columns: new[] { "principal_id", "role_id", "resource_path" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

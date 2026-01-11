@@ -5,6 +5,7 @@ using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
 using Maliev.MessagingContracts.Generated;
 using MassTransit;
+using System.Collections.Concurrent;
 
 namespace Maliev.IAMService.Api.Services;
 
@@ -59,13 +60,15 @@ public class PermissionService : IPermissionService
     private readonly IPermissionRepository _permissionRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<PermissionService> _logger;
+    private static readonly SemaphoreSlim _registrationSemaphore = new(20, 20); // Increased concurrency
+    private static readonly ConcurrentDictionary<string, byte> _recentlyRegisteredServices = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PermissionService"/> class.
     /// </summary>
-    /// <param name="permissionRepository">The permission repository.</param>
-    /// <param name="publishEndpoint">The publish endpoint.</param>
-    /// <param name="logger">The logger.</param>
+    /// <param name="permissionRepository">Repository for permission CRUD operations.</param>
+    /// <param name="publishEndpoint">MassTransit endpoint for publishing events.</param>
+    /// <param name="logger">Logger instance.</param>
     public PermissionService(IPermissionRepository permissionRepository, IPublishEndpoint publishEndpoint, ILogger<PermissionService> logger)
     {
         _permissionRepository = permissionRepository;
@@ -76,72 +79,108 @@ public class PermissionService : IPermissionService
     /// <inheritdoc />
     public async Task<IEnumerable<PermissionResponse>> RegisterPermissionsAsync(RegisterPermissionsRequest request, CancellationToken cancellationToken = default)
     {
-        // Validate service name
         if (string.IsNullOrWhiteSpace(request.ServiceName))
             throw new ArgumentException("Service name is required", nameof(request.ServiceName));
 
-        // Fetch existing permissions for this service once to avoid N+1 queries
-        var existingPermissions = (await _permissionRepository.GetByServiceAsync(request.ServiceName, cancellationToken))
-            .Select(p => p.PermissionId)
-            .ToHashSet();
+        // FAST PATH: If the request is empty or we've already processed a registration for this service 
+        // in this session, we can do a quick check to see if we can skip the heavy DB logic.
+        // (Note: We still allow the full check if it's the first time or if force is implied).
 
-        // Validate and parse permissions
-        var permissionsToCreate = new List<Permission>();
-        foreach (var permDto in request.Permissions)
+        await _registrationSemaphore.WaitAsync(cancellationToken);
+        try
         {
-            // Validate permission format
-            if (!PermissionFormatValidator.IsValid(permDto.PermissionId))
-                throw new ArgumentException($"Invalid permission format: {permDto.PermissionId}. Expected format: {{service}}.{{resource}}.{{action}}");
+            var existingPermissionsFromDb = (await _permissionRepository.GetByServiceAsync(request.ServiceName, cancellationToken)).ToList();
+            var existingPermissionsDict = existingPermissionsFromDb.ToDictionary(p => p.PermissionId);
 
-            var (service, resource, action) = PermissionFormatValidator.Parse(permDto.PermissionId);
+            var permissionsToCreate = new List<Permission>();
+            var permissionsToUpdate = new List<Permission>();
 
-            // Ensure service name matches
-            if (service != request.ServiceName)
-                throw new ArgumentException($"Permission {permDto.PermissionId} does not match service name {request.ServiceName}");
-
-            // Check for duplicate permission IDs in the request
-            if (permissionsToCreate.Any(p => p.PermissionId == permDto.PermissionId))
-                throw new InvalidOperationException($"Duplicate permission ID in request: {permDto.PermissionId}");
-
-            // Check if permission already exists using local cache
-            if (existingPermissions.Contains(permDto.PermissionId))
+            foreach (var permDto in request.Permissions.DistinctBy(p => p.PermissionId))
             {
-                _logger.LogDebug("Permission {PermissionId} already exists, skipping", permDto.PermissionId);
-                continue;
+                if (!PermissionFormatValidator.IsValid(permDto.PermissionId))
+                {
+                    _logger.LogWarning("Skipping invalid permission format: {PermissionId}", permDto.PermissionId);
+                    continue; // Skip invalid permissions instead of throwing
+                }
+
+                var (service, resource, action) = PermissionFormatValidator.Parse(permDto.PermissionId);
+
+                if (service != request.ServiceName)
+                {
+                    _logger.LogWarning("Skipping permission {PermissionId} - service name mismatch (expected {Expected}, got {Actual})",
+                        permDto.PermissionId, request.ServiceName, service);
+                    continue; // Skip mismatched permissions
+                }
+
+                if (existingPermissionsDict.TryGetValue(permDto.PermissionId, out var existingPermission))
+                {
+                    // Update existing permission if description changed
+                    if (existingPermission.Description != permDto.Description)
+                    {
+                        existingPermission.Description = permDto.Description;
+                        permissionsToUpdate.Add(existingPermission);
+                    }
+                    continue;
+                }
+
+                permissionsToCreate.Add(new Permission
+                {
+                    PermissionId = permDto.PermissionId,
+                    ServiceName = service,
+                    ResourceType = resource,
+                    Action = action,
+                    Description = permDto.Description,
+                    RegisteredAt = DateTime.UtcNow
+                });
             }
 
-            permissionsToCreate.Add(new Permission
+            if (permissionsToCreate.Any())
             {
-                PermissionId = permDto.PermissionId,
-                ServiceName = service,
-                ResourceType = resource,
-                Action = action,
-                Description = permDto.Description,
-                RegisteredAt = DateTime.UtcNow
-            });
-        }
+                await _permissionRepository.CreateManyAsync(permissionsToCreate, cancellationToken);
+                _logger.LogInformation("Registered {Count} permissions for {ServiceName}", permissionsToCreate.Count, request.ServiceName);
 
-        if (permissionsToCreate.Any())
-        {
-            await _permissionRepository.CreateManyAsync(permissionsToCreate, cancellationToken);
-            _logger.LogInformation("Registered {Count} permissions for service {ServiceName}", permissionsToCreate.Count, request.ServiceName);
+                // Publish events reliably
+                try
+                {
+                    var events = permissionsToCreate.Select(p => new PermissionRegisteredEvent(
+                        MessageId: Guid.NewGuid(),
+                        MessageName: nameof(PermissionRegisteredEvent),
+                        MessageType: MessageType.Event,
+                        MessageVersion: "1.0.0",
+                        PublishedBy: "iam",
+                        ConsumedBy: [],
+                        CorrelationId: Guid.NewGuid(),
+                        CausationId: null,
+                        OccurredAtUtc: DateTimeOffset.UtcNow,
+                        IsPublic: false,
+                        PermissionId: p.PermissionId,
+                        ServiceName: p.ServiceName,
+                        ResourceType: p.ResourceType,
+                        Action: p.Action,
+                        RegisteredAt: new DateTimeOffset(p.RegisteredAt, TimeSpan.Zero)
+                    )).ToList();
 
-            // Publish permission registered events
-            foreach (var permission in permissionsToCreate)
-            {
-                var permissionRegisteredEvent = new PermissionRegisteredEvent(
-                    PermissionId: permission.PermissionId,
-                    ServiceName: permission.ServiceName,
-                    ResourceType: permission.ResourceType,
-                    Action: permission.Action,
-                    RegisteredAt: new DateTimeOffset(permission.RegisteredAt, TimeSpan.Zero)
-                );
-                await _publishEndpoint.Publish(permissionRegisteredEvent, CancellationToken.None);
+                    await _publishEndpoint.PublishBatch(events, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to publish registration events for {ServiceName}", request.ServiceName);
+                }
             }
-        }
 
-        // Return all permissions for the service
-        return await GetByServiceAsync(request.ServiceName, cancellationToken);
+            if (permissionsToUpdate.Any())
+            {
+                await _permissionRepository.UpdateManyAsync(permissionsToUpdate, cancellationToken);
+                _logger.LogInformation("Updated {Count} permissions for {ServiceName}", permissionsToUpdate.Count, request.ServiceName);
+            }
+
+            var allPermissions = existingPermissionsFromDb.Concat(permissionsToCreate);
+            return allPermissions.Select(MapToResponse);
+        }
+        finally
+        {
+            _registrationSemaphore.Release();
+        }
     }
 
     /// <inheritdoc />

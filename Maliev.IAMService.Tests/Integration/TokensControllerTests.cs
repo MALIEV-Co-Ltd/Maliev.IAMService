@@ -39,7 +39,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("token-test-principal");
         var request = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
 
         // Act
@@ -65,7 +65,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("jwt-structure-test");
         var request = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
 
         // Act
@@ -92,7 +92,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("resource-scope-test");
         var request = new IssueTokenRequest
         {
-            PrincipalId = principalId,
+            PrincipalId = principalId.ToString(),
             ResourcePath = "buckets/test-bucket-789"
         };
 
@@ -117,7 +117,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("custom-expiry-test");
         var request = new IssueTokenRequest
         {
-            PrincipalId = principalId,
+            PrincipalId = principalId.ToString(),
             ExpiresInMinutes = 30
         };
 
@@ -141,7 +141,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var nonExistentId = Guid.NewGuid();
         var request = new IssueTokenRequest
         {
-            PrincipalId = nonExistentId
+            PrincipalId = nonExistentId.ToString()
         };
 
         // Act
@@ -160,7 +160,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("refresh-test-principal");
         var issueRequest = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
         var issueResponse = await Client.PostAsJsonAsync("/iam/v1/auth/token", issueRequest);
         var issueResult = await issueResponse.Content.ReadFromJsonAsync<TokenResponse>();
@@ -211,7 +211,7 @@ public class TokensControllerTests : BaseIntegrationTest
         var principalId = await CreateTestPrincipal("reuse-test-principal");
         var issueRequest = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
         var issueResponse = await Client.PostAsJsonAsync("/iam/v1/auth/token", issueRequest);
         var issueResult = await issueResponse.Content.ReadFromJsonAsync<TokenResponse>();
@@ -312,7 +312,7 @@ public class TokensControllerTests : BaseIntegrationTest
         // Act - Issue token
         var tokenRequest = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
         var response = await Client.PostAsJsonAsync("/iam/v1/auth/token", tokenRequest);
         var result = await response.Content.ReadFromJsonAsync<TokenResponse>();
@@ -373,7 +373,7 @@ public class TokensControllerTests : BaseIntegrationTest
         // Act - Issue token
         var tokenRequest = new IssueTokenRequest
         {
-            PrincipalId = principalId
+            PrincipalId = principalId.ToString()
         };
         var response = await Client.PostAsJsonAsync("/iam/v1/auth/token", tokenRequest);
         var result = await response.Content.ReadFromJsonAsync<TokenResponse>();

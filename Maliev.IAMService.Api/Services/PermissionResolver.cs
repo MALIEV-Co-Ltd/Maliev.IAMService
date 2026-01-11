@@ -40,6 +40,7 @@ public interface IPermissionResolver
 public class PermissionResolver : IPermissionResolver
 {
     private readonly IBindingRepository _bindingRepository;
+    private readonly IPrincipalService _principalService;
     private readonly ICacheService _cacheService;
     private readonly ILogger<PermissionResolver> _logger;
     private const int CacheTtlMinutes = 5;
@@ -48,14 +49,17 @@ public class PermissionResolver : IPermissionResolver
     /// Initializes a new instance of the <see cref="PermissionResolver"/> class.
     /// </summary>
     /// <param name="bindingRepository">The binding repository.</param>
+    /// <param name="principalService">The principal service.</param>
     /// <param name="cacheService">The cache service.</param>
     /// <param name="logger">The logger.</param>
     public PermissionResolver(
         IBindingRepository bindingRepository,
+        IPrincipalService principalService,
         ICacheService cacheService,
         ILogger<PermissionResolver> logger)
     {
         _bindingRepository = bindingRepository;
+        _principalService = principalService;
         _cacheService = cacheService;
         _logger = logger;
     }
@@ -63,7 +67,26 @@ public class PermissionResolver : IPermissionResolver
     /// <inheritdoc />
     public async Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default)
     {
-        var cacheKey = GetCacheKey(request.PrincipalId, request.ResourcePath);
+        // T150: Resolve principal identifier to GUID
+        Guid principalGuid;
+        try
+        {
+            principalGuid = await _principalService.ResolvePrincipalIdAsync(request.PrincipalId, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve principal {PrincipalId}", request.PrincipalId);
+            return new ResolvePermissionsResponse
+            {
+                PrincipalId = Guid.Empty,
+                Permissions = new List<string>(),
+                Roles = new List<string>(),
+                ResourcePath = request.ResourcePath,
+                FromCache = false
+            };
+        }
+
+        var cacheKey = GetCacheKey(principalGuid, request.ResourcePath);
 
         // T086: Try to get from cache
         var cached = await _cacheService.GetAsync<ResolvePermissionsResponse>(cacheKey, cancellationToken);
@@ -73,7 +96,7 @@ public class PermissionResolver : IPermissionResolver
         }
 
         // T091: Get active bindings (filtering expired ones)
-        var bindings = await _bindingRepository.GetByPrincipalAsync(request.PrincipalId, cancellationToken);
+        var bindings = await _bindingRepository.GetByPrincipalAsync(principalGuid, cancellationToken);
 
         // T087: Resolve global roles
         var globalBindings = bindings.Where(b => string.IsNullOrEmpty(b.ResourcePath)).ToList();
@@ -106,7 +129,7 @@ public class PermissionResolver : IPermissionResolver
 
         var response = new ResolvePermissionsResponse
         {
-            PrincipalId = request.PrincipalId,
+            PrincipalId = principalGuid,
             Permissions = allPermissions.ToList(),
             Roles = roleIds,
             ResourcePath = request.ResourcePath,
@@ -138,7 +161,7 @@ public class PermissionResolver : IPermissionResolver
 
         return new CheckPermissionResponse
         {
-            PrincipalId = request.PrincipalId,
+            PrincipalId = resolved.PrincipalId,
             PermissionId = request.PermissionId,
             Allowed = allowed,
             ResourcePath = request.ResourcePath,
@@ -149,7 +172,7 @@ public class PermissionResolver : IPermissionResolver
 
     /// <summary>
     /// Matches a binding's resource path against a requested resource path.
-    /// Supports hierarchical paths with wildcards (single-level /* and multi-level /**).
+    /// Supports hierarchical paths (inheritance) and wildcards (single-level /* and multi-level /**).
     /// </summary>
     /// <param name="bindingPath">Resource path from binding (e.g., "projects/123" or "projects/123/**")</param>
     /// <param name="requestPath">Requested hierarchical path (e.g., "projects/123/datasets/456")</param>
@@ -164,8 +187,9 @@ public class PermissionResolver : IPermissionResolver
         if (string.IsNullOrEmpty(bindingPath))
             return false;
 
-        // Exact match
-        if (bindingPath == requestPath)
+        // T204: Hierarchical match (Inheritance)
+        // A binding on "orgs/1" matches "orgs/1", "orgs/1/projects/2", etc.
+        if (requestPath == bindingPath || requestPath.StartsWith(bindingPath + "/"))
             return true;
 
         // Multi-level wildcard: projects/123/** matches all descendants
@@ -192,8 +216,8 @@ public class PermissionResolver : IPermissionResolver
     /// <summary>
     /// Generates a cache key for storing resolved permissions.
     /// Format: "iam:principal:{principalId}:permissions" for global permissions,
-    /// "iam:principal:{principalId}:permissions:path:{resourcePath}" for resource-scoped.
-    /// Example: "iam:principal:123:permissions:path:projects:456:datasets:789"
+    /// "iam:principal:{principalId}:permissions:path:{base64ResourcePath}" for resource-scoped.
+    /// Example: "iam:principal:123:permissions:path:cHJvamVjdHMvMTIz"
     /// </summary>
     /// <param name="principalId">The principal ID.</param>
     /// <param name="resourcePath">Optional hierarchical resource path for scoping.</param>
@@ -203,9 +227,9 @@ public class PermissionResolver : IPermissionResolver
         var key = $"iam:principal:{principalId}:permissions";
         if (!string.IsNullOrEmpty(resourcePath))
         {
-            // Sanitize resource path for cache key (replace / with :)
-            var sanitizedPath = resourcePath.Replace("/", ":");
-            key += $":path:{sanitizedPath}";
+            // T202: Use Base64 to ensure uniqueness and safe characters for Redis key
+            var encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(resourcePath));
+            key += $":path:{encodedPath}";
         }
         return key;
     }

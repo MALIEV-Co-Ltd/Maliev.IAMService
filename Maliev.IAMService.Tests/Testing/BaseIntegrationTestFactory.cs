@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Testcontainers.PostgreSql;
 using Testcontainers.RabbitMq;
@@ -93,6 +94,20 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
 
     public new async Task DisposeAsync()
     {
+        // Try to stop MassTransit gracefully before disposing the provider
+        if (Services != null)
+        {
+            try
+            {
+                var busControl = Services.GetRequiredService<IBusControl>();
+                await busControl.StopAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+            }
+            catch (Exception)
+            {
+                // Ignore errors during bus stop in tests
+            }
+        }
+
         // Dispose the application FIRST to allow MassTransit to shut down gracefully
         await base.DisposeAsync();
 
@@ -132,6 +147,21 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.ConfigureLogging(logging =>
+        {
+            logging.ClearProviders();
+            // Optional: add a simple console logger for debugging tests if needed
+            // logging.AddConsole();
+        });
+
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:SecurityKey"] = "test-secret-key-at-least-32-characters-long"
+            });
+        });
+
         builder.ConfigureTestServices(services =>
         {
             // Configure JWT Bearer authentication with test RSA key
@@ -146,7 +176,9 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
                     ValidIssuer = "test-issuer",
                     ValidAudience = "test-audience",
                     IssuerSigningKey = new RsaSecurityKey(_testRsa),
-                    ClockSkew = TimeSpan.Zero // No clock skew for tests
+                    ClockSkew = TimeSpan.Zero, // No clock skew for tests
+                    NameClaimType = "sub",
+                    RoleClaimType = "role"
                 };
             });
 
@@ -273,7 +305,7 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         {
             foreach (var role in roles)
             {
-                claims.Add(new Claim(ClaimTypes.Role, role));
+                claims.Add(new Claim("role", role));
             }
         }
 
@@ -313,6 +345,26 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
     public HttpClient CreateAuthenticatedClient(string userId = "test-user", string[]? roles = null)
     {
         var token = CreateTestJwtToken(userId, roles);
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        return client;
+    }
+
+    /// <summary>
+    /// Creates an HTTP client authenticated as a service account for IAM registration endpoints.
+    /// </summary>
+    public HttpClient CreateServiceAccountClient(string serviceAccountId = "test-service-account")
+    {
+        var additionalClaims = new Dictionary<string, string>
+        {
+            ["principal_type"] = "service_account"
+        };
+
+        var token = CreateTestJwtToken(
+            userId: serviceAccountId,
+            roles: new[] { "service-account" },
+            additionalClaims: additionalClaims);
+
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         return client;

@@ -10,17 +10,17 @@ namespace Maliev.IAMService.Api.Events;
 /// </summary>
 public class RoleUpdatedEventConsumer : IConsumer<RoleUpdatedEvent>
 {
-    private readonly ICacheService _cacheService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<RoleUpdatedEventConsumer> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RoleUpdatedEventConsumer"/> class.
     /// </summary>
-    /// <param name="cacheService">The cache service.</param>
+    /// <param name="scopeFactory">The service scope factory.</param>
     /// <param name="logger">The logger.</param>
-    public RoleUpdatedEventConsumer(ICacheService cacheService, ILogger<RoleUpdatedEventConsumer> logger)
+    public RoleUpdatedEventConsumer(IServiceScopeFactory scopeFactory, ILogger<RoleUpdatedEventConsumer> logger)
     {
-        _cacheService = cacheService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -29,10 +29,13 @@ public class RoleUpdatedEventConsumer : IConsumer<RoleUpdatedEvent>
     {
         var evt = context.Message;
 
+        using var scope = _scopeFactory.CreateScope();
+        var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
+
         // When a role is updated, we need to invalidate cache for ALL principals
         // This is a broad invalidation but ensures consistency
         // In production, you might track which principals have this role and invalidate selectively
-        await _cacheService.RemoveByPrefixAsync("iam:principal:", CancellationToken.None);
+        await cacheService.RemoveByPrefixAsync("iam:principal:", context.CancellationToken);
 
         _logger.LogWarning("Invalidated ALL principal permission caches after role {RoleId} was updated", evt.RoleId);
     }

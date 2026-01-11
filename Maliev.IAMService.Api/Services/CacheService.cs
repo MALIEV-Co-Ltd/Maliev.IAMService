@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Caching.Distributed;
 using System.Text.Json;
+using StackExchange.Redis;
 
 namespace Maliev.IAMService.Api.Services;
 
 /// <summary>
-/// Service for distributed caching using Redis via IDistributedCache.
+/// Service for distributed caching using Redis via IDistributedCache and IConnectionMultiplexer.
 /// Provides JSON serialization/deserialization with camelCase naming policy.
 /// Default TTL is 15 minutes if not specified. Failures are logged but do not throw exceptions.
 /// </summary>
@@ -42,9 +43,8 @@ public interface ICacheService
     Task RemoveAsync(string key, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Removes all cache keys matching a prefix pattern.
-    /// Note: This requires Redis-specific implementation with key scanning.
-    /// Current implementation is a placeholder that logs a warning.
+    /// Removes all cache keys matching a prefix pattern across all Redis nodes.
+    /// Uses SCAN-based iteration to efficiently find and delete keys without blocking.
     /// </summary>
     /// <param name="prefix">The key prefix to match for deletion.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -52,13 +52,14 @@ public interface ICacheService
 }
 
 /// <summary>
-/// Implementation of cache service using IDistributedCache (typically Redis).
+/// Implementation of cache service using IDistributedCache and IConnectionMultiplexer.
 /// Uses JSON serialization with camelCase naming policy for cross-platform compatibility.
 /// All operations are fail-safe: exceptions are logged but do not throw to prevent cache failures from breaking operations.
 /// </summary>
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _cache;
+    private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<CacheService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -69,10 +70,12 @@ public class CacheService : ICacheService
     /// Initializes a new instance of the <see cref="CacheService"/> class.
     /// </summary>
     /// <param name="cache">The distributed cache.</param>
+    /// <param name="redis">The Redis connection multiplexer.</param>
     /// <param name="logger">The logger.</param>
-    public CacheService(IDistributedCache cache, ILogger<CacheService> logger)
+    public CacheService(IDistributedCache cache, IConnectionMultiplexer redis, ILogger<CacheService> logger)
     {
         _cache = cache;
+        _redis = redis;
         _logger = logger;
     }
 
@@ -129,10 +132,38 @@ public class CacheService : ICacheService
     /// <inheritdoc />
     public async Task RemoveByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
     {
-        // Note: Pattern-based deletion requires Redis-specific implementation
-        // For now, this is a placeholder that logs a warning
-        // In production, use IConnectionMultiplexer to scan and delete keys by pattern
-        _logger.LogWarning("RemoveByPrefixAsync not fully implemented - requires Redis-specific key scanning");
-        await Task.CompletedTask;
+        try
+        {
+            if (!_redis.IsConnected)
+            {
+                _logger.LogWarning("Redis is not connected. Skipping prefix-based invalidation for: {Prefix}", prefix);
+                return;
+            }
+
+            var endpoints = _redis.GetEndPoints();
+            var db = _redis.GetDatabase();
+            var tasks = new List<Task>();
+
+            foreach (var endpoint in endpoints)
+            {
+                var server = _redis.GetServer(endpoint);
+                // Note: server.Keys uses SCAN if the server supports it (Redis 2.8+), avoiding blocking the server
+                var keys = server.Keys(pattern: prefix + "*").ToArray();
+                if (keys.Length > 0)
+                {
+                    tasks.Add(db.KeyDeleteAsync(keys));
+                }
+            }
+
+            if (tasks.Count > 0)
+            {
+                await Task.WhenAll(tasks);
+                _logger.LogInformation("Successfully invalidated {Count} cache keys with prefix: {Prefix}", tasks.Count, prefix);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to remove cache keys by prefix {Prefix}", prefix);
+        }
     }
 }

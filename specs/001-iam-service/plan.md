@@ -274,7 +274,7 @@ builder.Services.AddScoped<CacheService>();
 builder.Services.AddHostedService<ExpiredBindingCleanupService>();
 
 // ===== STEP 6: Add Custom Metrics =====
-builder.AddServiceMeters("iam-service");
+builder.AddServiceMeters("iam-meter");
 
 var app = builder.Build();
 

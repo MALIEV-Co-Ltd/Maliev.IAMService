@@ -6,9 +6,9 @@ namespace Maliev.IAMService.Api.Models.Requests;
 public record BulkCheckPermissionRequest
 {
     /// <summary>
-    /// The principal ID to check permissions for.
+    /// The principal identifier to check permissions for (GUID, email, or service name).
     /// </summary>
-    public required Guid PrincipalId { get; init; }
+    public required string PrincipalId { get; init; }
 
     /// <summary>
     /// List of permission checks to perform.
