@@ -48,7 +48,7 @@ public class PermissionsController : ControllerBase
     /// <response code="400">If the permission format is invalid or service name mismatch occurs.</response>
     /// <response code="409">If a permission with the same ID already exists.</response>
     [HttpPost("register")]
-    [AllowAnonymous] // Called by RabbitMQ consumer internally via service layer, no HTTP auth required
+    [Authorize] // Restricted to authorized services/principals
     public async Task<IActionResult> RegisterPermissions([FromBody] RegisterPermissionsRequest request, CancellationToken cancellationToken)
     {
         try
