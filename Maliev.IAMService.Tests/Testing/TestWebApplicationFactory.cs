@@ -50,7 +50,7 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
             "iam.audit.read", "iam.audit.list", "iam.audit.view"
         };
 
-        var token = CreateTestJwtToken(userId, roles: null, permissions: allPermissions);
+        var token = CreateTestJwtToken(userId, roles: new[] { "service-account" }, permissions: allPermissions);
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         return client;
