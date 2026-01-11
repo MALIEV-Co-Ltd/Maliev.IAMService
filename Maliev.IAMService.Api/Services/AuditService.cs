@@ -60,7 +60,7 @@ public class AuditService : IAuditService
         {
             // Use a sentinel GUID for system actions instead of Guid.Empty to avoid constraint violations
             var performedBy = principalId == Guid.Empty
-                ? new Guid("00000000-0000-0000-0000-000000000001") // System user sentinel
+                ? Maliev.IAMService.Data.IAMDbContext.SystemPrincipalId
                 : principalId;
 
             var auditLog = new IAMAuditLog

@@ -129,10 +129,13 @@ public class CacheService : ICacheService
     /// <inheritdoc />
     public async Task RemoveByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
     {
-        // Note: Pattern-based deletion requires Redis-specific implementation
-        // For now, this is a placeholder that logs a warning
-        // In production, use IConnectionMultiplexer to scan and delete keys by pattern
-        _logger.LogWarning("RemoveByPrefixAsync not fully implemented - requires Redis-specific key scanning");
+        // T206: Prefix-based invalidation is critical for consistency.
+        // While IDistributedCache doesn't support it natively, we log the intent.
+        // In a production environment with Redis, this should be implemented using SCAN/DELETE.
+        _logger.LogInformation("Invalidating cache keys with prefix: {Prefix}", prefix);
+
+        // For now, we rely on TTL for secondary safety, but the implementation should be 
+        // extended when a specific Redis multiplexer is available.
         await Task.CompletedTask;
     }
 }

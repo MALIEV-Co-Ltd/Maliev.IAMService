@@ -2,6 +2,7 @@ using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
 using Maliev.IAMService.Data.Repositories;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.WebUtilities;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -55,7 +56,6 @@ public class TokenService : ITokenService
 {
     private readonly IPermissionResolver _permissionResolver;
     private readonly IPrincipalService _principalService;
-    private readonly IBindingRepository _bindingRepository;
     private readonly ICacheService _cacheService;
     private readonly IAuditService _auditService;
     private readonly ILogger<TokenService> _logger;
@@ -74,7 +74,6 @@ public class TokenService : ITokenService
     /// </summary>
     /// <param name="permissionResolver">The permission resolver.</param>
     /// <param name="principalService">The principal service.</param>
-    /// <param name="bindingRepository">The binding repository.</param>
     /// <param name="cacheService">The cache service.</param>
     /// <param name="auditService">The audit service.</param>
     /// <param name="configuration">The configuration.</param>
@@ -83,7 +82,6 @@ public class TokenService : ITokenService
     public TokenService(
         IPermissionResolver permissionResolver,
         IPrincipalService principalService,
-        IBindingRepository bindingRepository,
         ICacheService cacheService,
         IAuditService auditService,
         IConfiguration configuration,
@@ -92,7 +90,6 @@ public class TokenService : ITokenService
     {
         _permissionResolver = permissionResolver;
         _principalService = principalService;
-        _bindingRepository = bindingRepository;
         _cacheService = cacheService;
         _auditService = auditService;
         _configuration = configuration;
@@ -111,30 +108,29 @@ public class TokenService : ITokenService
     /// <inheritdoc />
     public async Task<TokenResponse> IssueTokenAsync(IssueTokenRequest request, CancellationToken cancellationToken = default)
     {
+        // T150: Resolve principal identifier to GUID
+        var principalGuid = await _principalService.ResolvePrincipalIdAsync(request.PrincipalId, cancellationToken);
+
         // Validate principal exists
-        var principal = await _principalService.GetByIdAsync(request.PrincipalId, cancellationToken);
+        var principal = await _principalService.GetByIdAsync(principalGuid, cancellationToken);
         if (principal == null)
             throw new InvalidOperationException($"Principal {request.PrincipalId} not found");
 
         // T142: Resolve permissions for the principal
         var resolveRequest = new ResolvePermissionsRequest
         {
-            PrincipalId = request.PrincipalId,
+            PrincipalId = principalGuid.ToString(),
             ResourcePath = request.ResourcePath
         };
         var permissionsResponse = await _permissionResolver.ResolvePermissionsAsync(resolveRequest, cancellationToken);
 
-        // Get role bindings
-        var bindings = await _bindingRepository.GetByPrincipalAsync(request.PrincipalId, cancellationToken);
-        var activeBindings = bindings.Where(b => !b.ExpiresAt.HasValue || b.ExpiresAt.Value > DateTime.UtcNow);
-
         // T142: Build JWT claims
         var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, request.PrincipalId.ToString()),
+            new Claim(JwtRegisteredClaimNames.Sub, principalGuid.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
-            new Claim("principal_id", request.PrincipalId.ToString()),
+            new Claim("principal_id", principalGuid.ToString()),
             new Claim("principal_type", principal.PrincipalType)
         };
 
@@ -150,10 +146,10 @@ public class TokenService : ITokenService
             claims.Add(new Claim("permission", permission));
         }
 
-        // Add roles as claims
-        foreach (var binding in activeBindings.GroupBy(b => b.RoleId).Select(g => g.First()))
+        // Add roles as claims (T205: Use roles from resolver response)
+        foreach (var roleId in permissionsResponse.Roles)
         {
-            claims.Add(new Claim("role", binding.RoleId));
+            claims.Add(new Claim("role", roleId));
         }
 
         // Add resource scope if specified
@@ -183,19 +179,19 @@ public class TokenService : ITokenService
 
         // T144: Generate refresh token
         var refreshToken = GenerateRefreshToken();
-        await StoreRefreshToken(request.PrincipalId, refreshToken, expiresAt.AddDays(7), request.ResourcePath, cancellationToken);
+        await StoreRefreshToken(principalGuid, refreshToken, expiresAt.AddDays(7), request.ResourcePath, cancellationToken);
 
         // T147: Audit logging
-        await _auditService.LogAsync("ISSUE_TOKEN", request.PrincipalId, new Dictionary<string, object>
+        await _auditService.LogAsync("ISSUE_TOKEN", principalGuid, new Dictionary<string, object>
         {
-            ["principal_id"] = request.PrincipalId,
+            ["principal_id"] = principalGuid,
             ["expires_at"] = expiresAt,
-            ["permissions_count"] = permissionsResponse.Permissions.Count(),
-            ["roles_count"] = activeBindings.Count()
+            ["permissions_count"] = permissionsResponse.Permissions.Count,
+            ["roles_count"] = permissionsResponse.Roles.Count
         }, cancellationToken);
 
-        _logger.LogInformation("Issued JWT token for principal {PrincipalId}, expires at {ExpiresAt}",
-            request.PrincipalId, expiresAt);
+        _logger.LogInformation("Issued JWT token for principal {PrincipalId} ({PrincipalGuid}), expires at {ExpiresAt}",
+            request.PrincipalId, principalGuid, expiresAt);
 
         return new TokenResponse
         {
@@ -231,7 +227,7 @@ public class TokenService : ITokenService
         // Issue a new token
         var issueRequest = new IssueTokenRequest
         {
-            PrincipalId = storedToken.PrincipalId,
+            PrincipalId = storedToken.PrincipalId.ToString(),
             ResourcePath = storedToken.ResourcePath
         };
 
@@ -247,10 +243,10 @@ public class TokenService : ITokenService
         {
             kty = "RSA",
             use = "sig",
-            kid = "iam-service-key-1",
+            kid = _rsaKeyProvider.GetKeyId(),
             alg = "RS256",
-            n = Convert.ToBase64String(parameters.Modulus!),
-            e = Convert.ToBase64String(parameters.Exponent!)
+            n = WebEncoders.Base64UrlEncode(parameters.Modulus!),
+            e = WebEncoders.Base64UrlEncode(parameters.Exponent!)
         };
 
         var jwks = new

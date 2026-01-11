@@ -10,6 +10,11 @@ namespace Maliev.IAMService.Data;
 public class IAMDbContext : DbContext
 {
     /// <summary>
+    /// Sentinel GUID for system-level actions.
+    /// </summary>
+    public static readonly Guid SystemPrincipalId = new("00000000-0000-0000-0000-000000000001");
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="IAMDbContext"/> class.
     /// </summary>
     /// <param name="options">The options for this context.</param>
