@@ -100,21 +100,22 @@ public interface IPrincipalService
     Task<IEnumerable<ServiceAccountResponse>> GetServiceAccountsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Queries all effective permissions for a principal with optional resource scoping.
-    /// Results include permission deduplication, role attribution, and resource scope marking.
-    /// Results are cached for 5 minutes to optimize repeated queries.
+    /// Effective permissions response with deduplicated permissions and role attribution.
     /// </summary>
-    /// <param name="principalId">The principal ID to query permissions for.</param>
-    /// <param name="resourcePath">Optional hierarchical resource path filter (e.g., "projects/123/datasets/456").</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Effective permissions response with deduplicated permissions and role attribution.</returns>
     Task<EffectivePermissionsResponse> GetEffectivePermissionsAsync(Guid principalId, string? resourcePath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves a principal identifier (GUID, email, or service name) to a unique GUID.
+    /// Supports the serviceaccount.maliev.local email convention for service names.
+    /// </summary>
+    /// <param name="principalId">The principal identifier to resolve.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The resolved unique GUID of the principal.</returns>
+    Task<Guid> ResolvePrincipalIdAsync(string principalId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Implementation of principal service with secure API key management using PBKDF2 hashing.
-/// API keys use 100,000 iterations of HMACSHA256 for cryptographic strength.
-/// Effective permissions are cached for 5 minutes with resource scope support.
 /// </summary>
 public class PrincipalService : IPrincipalService
 {
@@ -131,15 +132,6 @@ public class PrincipalService : IPrincipalService
     /// <summary>
     /// Initializes a new instance of the <see cref="PrincipalService"/> class.
     /// </summary>
-    /// <param name="principalRepository">The principal repository.</param>
-    /// <param name="apiKeyRepository">The API key repository.</param>
-    /// <param name="bindingRepository">The binding repository.</param>
-    /// <param name="roleRepository">The role repository.</param>
-    /// <param name="permissionRepository">The permission repository.</param>
-    /// <param name="cacheService">The cache service.</param>
-    /// <param name="auditService">The audit service.</param>
-    /// <param name="configuration">The configuration.</param>
-    /// <param name="logger">The logger.</param>
     public PrincipalService(
         IPrincipalRepository principalRepository,
         IServiceAccountApiKeyRepository apiKeyRepository,
@@ -160,6 +152,31 @@ public class PrincipalService : IPrincipalService
         _auditService = auditService;
         _configuration = configuration;
         _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid> ResolvePrincipalIdAsync(string principalId, CancellationToken cancellationToken = default)
+    {
+        if (Guid.TryParse(principalId, out var guid))
+        {
+            return guid;
+        }
+
+        // Try to resolve by email (for users) or name (for service accounts)
+        var principal = await _principalRepository.GetByEmailAsync(principalId, cancellationToken);
+        if (principal == null)
+        {
+            // For service accounts, the email follows name@serviceaccount.maliev.local convention
+            var serviceEmail = $"{principalId.ToLowerInvariant()}@serviceaccount.maliev.local";
+            principal = await _principalRepository.GetByEmailAsync(serviceEmail, cancellationToken);
+        }
+
+        if (principal == null)
+        {
+            throw new InvalidOperationException($"Principal '{principalId}' could not be resolved to a GUID.");
+        }
+
+        return principal.PrincipalId;
     }
 
     /// <inheritdoc />
@@ -398,18 +415,19 @@ public class PrincipalService : IPrincipalService
         var activeBindings = bindings.Where(b => !b.ExpiresAt.HasValue || b.ExpiresAt.Value > DateTime.UtcNow);
 
         // Apply resource path filtering
-        if (!string.IsNullOrEmpty(resourcePath))
+        activeBindings = activeBindings.Where(b =>
         {
-            activeBindings = activeBindings.Where(b =>
-            {
-                // Global bindings (no resource scope) always apply
-                if (string.IsNullOrEmpty(b.ResourcePath))
-                    return true;
+            // Global bindings (no resource scope) always apply
+            if (string.IsNullOrEmpty(b.ResourcePath))
+                return true;
 
-                // Check if binding's resource path matches the requested path
-                return MatchesResourcePath(b.ResourcePath, resourcePath);
-            });
-        }
+            // T203: Exclude scoped bindings if no resource path was requested (global query)
+            if (string.IsNullOrEmpty(resourcePath))
+                return false;
+
+            // Check if binding's resource path matches the requested path
+            return MatchesResourcePath(b.ResourcePath, resourcePath);
+        });
 
         // Get all unique role IDs
         var roleIds = activeBindings.Select(b => b.RoleId).Distinct().ToList();
@@ -465,17 +483,15 @@ public class PrincipalService : IPrincipalService
 
             // T152: Determine if permission is scoped
             var resourcePaths = permissionBindingMap[permissionName];
-            var isScoped = resourcePaths.Any(p => !string.IsNullOrEmpty(p));
-
-            // Get the most specific resource path (prioritize non-null paths)
-            var primaryPath = resourcePaths.FirstOrDefault(p => !string.IsNullOrEmpty(p));
+            var distinctPaths = resourcePaths.Where(p => !string.IsNullOrEmpty(p)).Distinct().Cast<string>().ToList();
+            var isScoped = distinctPaths.Any();
 
             effectivePermissions.Add(new EffectivePermissionDto
             {
                 PermissionId = permission.PermissionId,
                 Description = permission.Description ?? "",
                 GrantedByRoles = roleNames,
-                ResourcePath = primaryPath,
+                ResourcePath = isScoped ? string.Join(", ", distinctPaths) : null,
                 IsScoped = isScoped
             });
         }
@@ -498,7 +514,7 @@ public class PrincipalService : IPrincipalService
 
     /// <summary>
     /// Matches a binding's resource path against a requested resource path.
-    /// Supports hierarchical paths with wildcards (single-level /* and multi-level /**).
+    /// Supports hierarchical paths (inheritance) and wildcards (single-level /* and multi-level /**).
     /// </summary>
     /// <param name="bindingPath">Resource path from binding (e.g., "projects/123" or "projects/123/**")</param>
     /// <param name="requestPath">Requested hierarchical path (e.g., "projects/123/datasets/456")</param>
@@ -513,8 +529,9 @@ public class PrincipalService : IPrincipalService
         if (string.IsNullOrEmpty(bindingPath))
             return false;
 
-        // Exact match
-        if (bindingPath == requestPath)
+        // T204: Hierarchical match (Inheritance)
+        // A binding on "orgs/1" matches "orgs/1", "orgs/1/projects/2", etc.
+        if (requestPath == bindingPath || requestPath.StartsWith(bindingPath + "/"))
             return true;
 
         // Multi-level wildcard: projects/123/** matches all descendants
@@ -539,24 +556,18 @@ public class PrincipalService : IPrincipalService
     }
 
     /// <summary>
-    /// Generates a cryptographically secure 32-character API key with 256-bit entropy.
-    /// Uses RNGCryptoServiceProvider for random byte generation.
+    /// Generates a cryptographically secure 44-character API key with 256-bit entropy.
+    /// Uses RandomNumberGenerator.GetInt32 to avoid statistical bias.
     /// Character set: A-Z, a-z, 0-9 (62 possible characters per position).
     /// </summary>
-    /// <returns>32-character API key string.</returns>
+    /// <returns>44-character API key string.</returns>
     private string GenerateApiKey()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        var data = new byte[32];
-        using (var rng = RandomNumberGenerator.Create())
+        var result = new char[44]; // Increased to 44 chars for 256-bit entropy
+        for (int i = 0; i < result.Length; i++)
         {
-            rng.GetBytes(data);
-        }
-
-        var result = new char[32];
-        for (int i = 0; i < 32; i++)
-        {
-            result[i] = chars[data[i] % chars.Length];
+            result[i] = chars[RandomNumberGenerator.GetInt32(chars.Length)];
         }
 
         return new string(result);

@@ -17,6 +17,11 @@ public interface IRsaKeyProvider
     /// Gets the RSA security key for signing.
     /// </summary>
     RsaSecurityKey GetSigningKey();
+
+    /// <summary>
+    /// Gets the unique identifier for the current key (Key ID / kid).
+    /// </summary>
+    string GetKeyId();
 }
 
 /// <summary>
@@ -27,6 +32,7 @@ public class RsaKeyProvider : IRsaKeyProvider
 {
     private readonly RSA _rsa;
     private readonly RsaSecurityKey _signingKey;
+    private readonly string _keyId;
     private readonly ILogger<RsaKeyProvider> _logger;
 
     /// <summary>
@@ -38,7 +44,8 @@ public class RsaKeyProvider : IRsaKeyProvider
     {
         _logger = logger;
         _rsa = LoadOrCreateRsaKey(configuration);
-        _signingKey = new RsaSecurityKey(_rsa);
+        _keyId = DeriveKeyId(_rsa);
+        _signingKey = new RsaSecurityKey(_rsa) { KeyId = _keyId };
     }
 
     /// <inheritdoc />
@@ -46,6 +53,16 @@ public class RsaKeyProvider : IRsaKeyProvider
 
     /// <inheritdoc />
     public RsaSecurityKey GetSigningKey() => _signingKey;
+
+    /// <inheritdoc />
+    public string GetKeyId() => _keyId;
+
+    private string DeriveKeyId(RSA rsa)
+    {
+        var parameters = rsa.ExportParameters(false);
+        var hash = SHA256.HashData(parameters.Modulus!);
+        return Convert.ToHexString(hash).Substring(0, 16).ToLower();
+    }
 
     private RSA LoadOrCreateRsaKey(IConfiguration configuration)
     {
@@ -69,11 +86,6 @@ public class RsaKeyProvider : IRsaKeyProvider
         // Generate new 2048-bit RSA key
         var newRsa = RSA.Create(2048);
         _logger.LogWarning("Generated new RSA key for JWT signing. This key should be persisted in configuration.");
-
-        // Log the private key (for development only - should be stored securely in production)
-        var privateKey = newRsa.ExportRSAPrivateKey();
-        var privateKeyBase64 = Convert.ToBase64String(privateKey);
-        _logger.LogInformation("RSA Private Key (Base64): {PrivateKey}", privateKeyBase64);
 
         return newRsa;
     }
