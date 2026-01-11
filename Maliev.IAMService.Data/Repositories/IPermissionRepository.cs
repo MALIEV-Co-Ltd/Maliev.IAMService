@@ -54,6 +54,13 @@ public interface IPermissionRepository
     Task CreateManyAsync(IEnumerable<Permission> permissions, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Updates multiple permissions asynchronously.
+    /// </summary>
+    /// <param name="permissions">The permissions to update.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    Task UpdateManyAsync(IEnumerable<Permission> permissions, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Checks if a permission exists asynchronously.
     /// </summary>
     /// <param name="permissionId">The unique identifier of the permission.</param>

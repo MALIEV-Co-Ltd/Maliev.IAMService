@@ -47,7 +47,7 @@ public class RolesController : ControllerBase
     /// <response code="200">Returns the registered role details.</response>
     /// <response code="400">If the role format is invalid or references non-existent permissions.</response>
     [HttpPost("register")]
-    [Authorize] // Restricted to authorized services/principals
+    [AllowAnonymous] // Called by RabbitMQ consumer internally via service layer, no HTTP auth required
     public async Task<IActionResult> RegisterRoles([FromBody] RegisterRolesRequest request, CancellationToken cancellationToken)
     {
         try

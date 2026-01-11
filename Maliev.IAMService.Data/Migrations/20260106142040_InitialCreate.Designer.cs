@@ -13,15 +13,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Maliev.IAMService.Data.Migrations
 {
     [DbContext(typeof(IAMDbContext))]
-    [Migration("20251221131248_ConvertRoleIdsToGcpFormat")]
-    partial class ConvertRoleIdsToGcpFormat
+    [Migration("20260106142040_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0")
+                .HasAnnotation("ProductVersion", "10.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -219,15 +219,10 @@ namespace Maliev.IAMService.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("principal_id");
 
-                    b.Property<string>("ResourceId")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("resource_type");
+                    b.Property<string>("ResourcePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("resource_path");
 
                     b.Property<string>("RoleId")
                         .IsRequired()
@@ -246,7 +241,7 @@ namespace Maliev.IAMService.Data.Migrations
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_principal_role_bindings_role_id");
 
-                    b.HasIndex("PrincipalId", "RoleId", "ResourceType", "ResourceId")
+                    b.HasIndex("PrincipalId", "RoleId", "ResourcePath")
                         .IsUnique();
 
                     b.ToTable("principal_role_bindings");

@@ -48,6 +48,13 @@ public class PermissionRepository : IPermissionRepository
     }
 
     /// <inheritdoc/>
+    public async Task UpdateManyAsync(IEnumerable<Permission> permissions, CancellationToken cancellationToken = default)
+    {
+        _context.Permissions.UpdateRange(permissions);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<bool> ExistsAsync(string permissionId, CancellationToken cancellationToken = default) =>
         await _context.Permissions.AnyAsync(p => p.PermissionId == permissionId, cancellationToken);
 }

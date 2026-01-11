@@ -10,17 +10,17 @@ namespace Maliev.IAMService.Api.Events;
 /// </summary>
 public class PrincipalRoleGrantedEventConsumer : IConsumer<PrincipalRoleGrantedEvent>
 {
-    private readonly ICacheService _cacheService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrincipalRoleGrantedEventConsumer> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PrincipalRoleGrantedEventConsumer"/> class.
     /// </summary>
-    /// <param name="cacheService">The cache service.</param>
+    /// <param name="scopeFactory">The service scope factory.</param>
     /// <param name="logger">The logger.</param>
-    public PrincipalRoleGrantedEventConsumer(ICacheService cacheService, ILogger<PrincipalRoleGrantedEventConsumer> logger)
+    public PrincipalRoleGrantedEventConsumer(IServiceScopeFactory scopeFactory, ILogger<PrincipalRoleGrantedEventConsumer> logger)
     {
-        _cacheService = cacheService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -29,8 +29,11 @@ public class PrincipalRoleGrantedEventConsumer : IConsumer<PrincipalRoleGrantedE
     {
         var evt = context.Message;
 
+        using var scope = _scopeFactory.CreateScope();
+        var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
+
         // Invalidate all cache entries for this principal
-        await _cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", CancellationToken.None);
+        await cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", context.CancellationToken);
 
         _logger.LogInformation("Invalidated permission cache for principal {PrincipalId} after role {RoleId} granted",
             evt.PrincipalId, evt.RoleId);
@@ -43,17 +46,17 @@ public class PrincipalRoleGrantedEventConsumer : IConsumer<PrincipalRoleGrantedE
 /// </summary>
 public class PrincipalRoleRevokedEventConsumer : IConsumer<PrincipalRoleRevokedEvent>
 {
-    private readonly ICacheService _cacheService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<PrincipalRoleRevokedEventConsumer> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PrincipalRoleRevokedEventConsumer"/> class.
     /// </summary>
-    /// <param name="cacheService">The cache service.</param>
+    /// <param name="scopeFactory">The service scope factory.</param>
     /// <param name="logger">The logger.</param>
-    public PrincipalRoleRevokedEventConsumer(ICacheService cacheService, ILogger<PrincipalRoleRevokedEventConsumer> logger)
+    public PrincipalRoleRevokedEventConsumer(IServiceScopeFactory scopeFactory, ILogger<PrincipalRoleRevokedEventConsumer> logger)
     {
-        _cacheService = cacheService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -62,8 +65,11 @@ public class PrincipalRoleRevokedEventConsumer : IConsumer<PrincipalRoleRevokedE
     {
         var evt = context.Message;
 
+        using var scope = _scopeFactory.CreateScope();
+        var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
+
         // Invalidate all cache entries for this principal
-        await _cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", CancellationToken.None);
+        await cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", context.CancellationToken);
 
         _logger.LogInformation("Invalidated permission cache for principal {PrincipalId} after role {RoleId} revoked",
             evt.PrincipalId, evt.RoleId);

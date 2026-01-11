@@ -38,8 +38,8 @@ public interface IBindingService
     Task RevokeRoleAsync(Guid principalId, Guid bindingId, Guid performedBy, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Retrieves all role bindings for a principal.
-    /// Includes both active and expired bindings.
+    /// Retrieves active role bindings for a principal.
+    /// Filters out expired bindings automatically.
     /// </summary>
     /// <param name="principalId">The principal ID to get bindings for.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -136,6 +136,16 @@ public class BindingService : IBindingService
 
         // T068: Publish event
         var principalRoleGrantedEvent = new PrincipalRoleGrantedEvent(
+            MessageId: Guid.NewGuid(),
+            MessageName: nameof(PrincipalRoleGrantedEvent),
+            MessageType: MessageType.Event,
+            MessageVersion: "1.0.0",
+            PublishedBy: "iam",
+            ConsumedBy: [],
+            CorrelationId: Guid.NewGuid(),
+            CausationId: null,
+            OccurredAtUtc: DateTimeOffset.UtcNow,
+            IsPublic: false,
             BindingId: created.BindingId,
             PrincipalId: created.PrincipalId,
             RoleId: created.RoleId,
@@ -176,6 +186,16 @@ public class BindingService : IBindingService
 
         // T069: Publish event
         var principalRoleRevokedEvent = new PrincipalRoleRevokedEvent(
+            MessageId: Guid.NewGuid(),
+            MessageName: nameof(PrincipalRoleRevokedEvent),
+            MessageType: MessageType.Event,
+            MessageVersion: "1.0.0",
+            PublishedBy: "iam",
+            ConsumedBy: [],
+            CorrelationId: Guid.NewGuid(),
+            CausationId: null,
+            OccurredAtUtc: DateTimeOffset.UtcNow,
+            IsPublic: false,
             BindingId: bindingId,
             PrincipalId: principalId,
             RoleId: binding.RoleId,

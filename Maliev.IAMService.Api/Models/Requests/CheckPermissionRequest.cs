@@ -6,9 +6,9 @@ namespace Maliev.IAMService.Api.Models.Requests;
 public record CheckPermissionRequest
 {
     /// <summary>
-    /// Gets or sets the unique identifier of the principal.
+    /// Gets or sets the identifier of the principal (can be a GUID, email, or service name).
     /// </summary>
-    public required Guid PrincipalId { get; init; }
+    public required string PrincipalId { get; init; }
     /// <summary>
     /// Gets or sets the unique identifier of the permission.
     /// </summary>

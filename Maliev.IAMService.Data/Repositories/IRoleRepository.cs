@@ -46,6 +46,13 @@ public interface IRoleRepository
     Task<Role> CreateAsync(Role role, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates multiple roles in a single database transaction.
+    /// </summary>
+    /// <param name="roles">The roles to create.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    Task CreateManyAsync(IEnumerable<Role> roles, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Updates an existing role asynchronously.
     /// </summary>
     /// <param name="role">The role to update.</param>

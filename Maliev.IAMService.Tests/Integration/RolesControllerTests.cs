@@ -2,23 +2,28 @@ using System.Net;
 using System.Net.Http.Json;
 using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
+using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Tests.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Maliev.IAMService.Tests.Integration;
 
 /// <summary>
 /// Integration tests for Roles Controller.
-/// Tests role registration, custom role CRUD, and permission management.
+/// Tests custom role CRUD operations and permission management via public APIs.
+/// Registration tests moved to PermissionRegistrationRequestConsumerTests (RabbitMQ-based).
 /// </summary>
-
 public class RolesControllerTests : BaseIntegrationTest
 {
-
-
-
-
+    /// <summary>
+    /// Helper method to register test permissions directly via service layer.
+    /// Used to seed test data for role tests.
+    /// </summary>
     private async Task<List<string>> RegisterTestPermissions(string serviceName)
     {
+        using var scope = Factory.Services.CreateScope();
+        var permissionService = scope.ServiceProvider.GetRequiredService<IPermissionService>();
+
         var permRequest = new RegisterPermissionsRequest
         {
             ServiceName = serviceName,
@@ -28,20 +33,21 @@ public class RolesControllerTests : BaseIntegrationTest
                 new() { PermissionId = $"{serviceName}.data.write", Description = "Write permission" }
             }
         };
-        await Client.PostAsJsonAsync("/iam/v1/permissions/register", permRequest);
+
+        await permissionService.RegisterPermissionsAsync(permRequest);
         return new List<string> { $"{serviceName}.data.read", $"{serviceName}.data.write" };
     }
 
-    [Fact]
-    public async Task RegisterRoles_ValidRequest_ReturnsOk()
+    /// <summary>
+    /// Helper method to register test roles directly via service layer.
+    /// Used to seed test data for role CRUD tests.
+    /// </summary>
+    private async Task RegisterTestRoles(string serviceName, List<string> permissions)
     {
-        await CleanDatabaseAsync();
+        using var scope = Factory.Services.CreateScope();
+        var roleService = scope.ServiceProvider.GetRequiredService<IRoleService>();
 
-        // Arrange
-        var serviceName = "role-service-1";
-        var permissions = await RegisterTestPermissions(serviceName);
-
-        var request = new RegisterRolesRequest
+        var roleRequest = new RegisterRolesRequest
         {
             ServiceName = serviceName,
             Roles = new List<RoleDto>
@@ -56,47 +62,11 @@ public class RolesControllerTests : BaseIntegrationTest
             }
         };
 
-        // Act
-        var response = await Client.PostAsJsonAsync("/iam/v1/roles/register", request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<List<RoleResponse>>();
-        Assert.NotNull(result);
-        Assert.Single(result);
-        Assert.Equal($"roles.{serviceName}.admin", result[0].RoleId);
+        await roleService.RegisterRolesAsync(roleRequest);
     }
 
-    [Fact]
-    public async Task RegisterRoles_InvalidRoleIdFormat_ReturnsBadRequest()
-    {
-        await CleanDatabaseAsync();
-
-        // Arrange
-        var serviceName = "role-service-2";
-        var permissions = await RegisterTestPermissions(serviceName);
-
-        var request = new RegisterRolesRequest
-        {
-            ServiceName = serviceName,
-            Roles = new List<RoleDto>
-            {
-                new()
-                {
-                    RoleId = "wrong-service/admin",
-                    Description = "Wrong format",
-                    PermissionIds = permissions,
-                    IsCustom = false
-                }
-            }
-        };
-
-        // Act
-        var response = await Client.PostAsJsonAsync("/iam/v1/roles/register", request);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
+    // REMOVED: RegisterRoles HTTP endpoint tests - replaced by PermissionRegistrationRequestConsumerTests
+    // Registration now happens via RabbitMQ messages, not HTTP endpoints
 
     [Fact]
     public async Task CreateCustomRole_ValidRequest_ReturnsCreated()

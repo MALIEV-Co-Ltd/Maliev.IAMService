@@ -6,9 +6,9 @@ namespace Maliev.IAMService.Api.Models.Requests;
 public record ResolvePermissionsRequest
 {
     /// <summary>
-    /// Gets or sets the unique identifier of the principal.
+    /// Gets or sets the identifier of the principal (can be a GUID, email, or service name).
     /// </summary>
-    public required Guid PrincipalId { get; init; }
+    public required string PrincipalId { get; init; }
 
     /// <summary>
     /// Hierarchical resource path (e.g., "projects/123/datasets/456")

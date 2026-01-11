@@ -46,25 +46,30 @@ public class PermissionsControllerTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task RegisterPermissions_InvalidFormat_ReturnsBadRequest()
+    public async Task RegisterPermissions_InvalidFormat_SkipsInvalidPermissions()
     {
         await CleanDatabaseAsync();
 
-        // Arrange
+        // Arrange - Mix of valid and invalid permissions
         var request = new RegisterPermissionsRequest
         {
             ServiceName = "test-service",
             Permissions = new List<PermissionDto>
             {
-                new() { PermissionId = "invalid-format", Description = "Invalid permission" }
+                new() { PermissionId = "invalid-format", Description = "Invalid permission" }, // Invalid - 1 part
+                new() { PermissionId = "test-service.data.read", Description = "Valid permission" } // Valid
             }
         };
 
         // Act
         var response = await Client.PostAsJsonAsync("/iam/v1/permissions/register", request);
 
-        // Assert
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // Assert - Should return OK but only register valid permissions
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<List<PermissionResponse>>();
+        Assert.NotNull(result);
+        Assert.Single(result); // Only 1 valid permission registered
+        Assert.Equal("test-service.data.read", result[0].PermissionId);
     }
 
     [Fact]

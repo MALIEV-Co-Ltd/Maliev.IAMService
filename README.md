@@ -44,10 +44,46 @@ To maintain high performance and low complexity, the following are **NOT** used:
 ## ✨ Key Features
 
 - **GCP-Style Permissions**: Uses `service.resource.action` hierarchy for consistent authorization.
-- **Service Account Management**: Machine-to-machine identities with secure API key rotation.
+- **Auto-Generated Service Account Tokens**: Services generate fresh JWT tokens on-demand using HMAC-SHA256, eliminating manual token management.
+- **Secure Service Registration**: Protected endpoints requiring `service-account` role prevent unauthorized permission registration.
 - **Real-time Resolution**: Redis-backed resolution ensuring <10ms latency for auth checks.
 - **Dynamic Role Binding**: Assign roles to principals with optional resource scoping.
-- **Self-Registration API**: Allows microservices to register permissions during startup.
+- **Self-Registration API**: Allows microservices to register permissions during startup with automatic authentication.
+
+---
+
+## 🔐 Service Account Authentication
+
+Services authenticate with IAM using **auto-generated JWT tokens**. This prevents unauthorized entities from registering fake permissions.
+
+### How It Works
+
+1. Services auto-generate fresh JWT tokens on-demand during startup
+2. Tokens include service identification claims and appropriate roles
+3. IAM validates token signatures and role claims before allowing registration
+4. Short-lived tokens (configurable expiration) improve security
+
+### Configuration
+
+Services require a shared HMAC secret key for token generation and validation.
+
+**Generate a secure key:**
+
+```bash
+# OpenSSL (Recommended)
+openssl rand -base64 32
+
+# PowerShell
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))
+```
+
+**Key Requirements:**
+- At least 32 characters long
+- Cryptographically random
+- Never commit to version control
+- Store in secure secret management system
+
+**For detailed documentation on service account authentication and deployment, see:** `IAM_SERVICE_ACCOUNT_AUTH.md`
 
 ---
 

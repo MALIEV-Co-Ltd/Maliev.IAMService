@@ -42,6 +42,13 @@ public class RoleRepository : IRoleRepository
     }
 
     /// <inheritdoc/>
+    public async Task CreateManyAsync(IEnumerable<Role> roles, CancellationToken cancellationToken = default)
+    {
+        await _context.Roles.AddRangeAsync(roles, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task UpdateAsync(Role role, CancellationToken cancellationToken = default)
     {
         role.UpdatedAt = DateTime.UtcNow;
