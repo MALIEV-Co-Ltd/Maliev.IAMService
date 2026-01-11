@@ -94,6 +94,7 @@ public class RoleService : IRoleService
     private readonly IAuditService _auditService;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<RoleService> _logger;
+    private static readonly SemaphoreSlim _registrationSemaphore = new(5, 5); // Limit to 5 concurrent registrations
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RoleService"/> class.
@@ -127,71 +128,92 @@ public class RoleService : IRoleService
         if (string.IsNullOrWhiteSpace(request.ServiceName))
             throw new ArgumentException("Service name is required", nameof(request.ServiceName));
 
-        // Fetch existing roles for this service once
-        var existingRoles = (await _roleRepository.GetByServiceAsync(request.ServiceName, cancellationToken))
-            .Select(r => r.RoleId)
-            .ToHashSet();
-
-        // Fetch all permissions mentioned in the request to validate them in bulk
-        var allPermissionIdsInRequest = request.Roles.SelectMany(r => r.PermissionIds).Distinct().ToList();
-        var existingPermissionIds = (await _permissionRepository.GetByIdsAsync(allPermissionIdsInRequest, cancellationToken))
-            .Select(p => p.PermissionId)
-            .ToHashSet();
-
-        var rolesToCreate = new List<Role>();
-        foreach (var roleDto in request.Roles)
+        // Use semaphore to throttle concurrent registrations during startup burst
+        await _registrationSemaphore.WaitAsync(cancellationToken);
+        try
         {
-            // Validate role ID format: roles.{service}.{role-name} (GCP style)
-            if (!roleDto.RoleId.StartsWith($"roles.{request.ServiceName}."))
-                throw new ArgumentException($"Role ID {roleDto.RoleId} must start with roles.{request.ServiceName}. (GCP format)");
+            // Fetch existing roles for this service once
+            var existingRolesFromDb = (await _roleRepository.GetByServiceAsync(request.ServiceName, cancellationToken)).ToList();
+            var existingRoleIds = existingRolesFromDb.Select(r => r.RoleId).ToHashSet();
 
-            // Check if role already exists using local cache
-            if (existingRoles.Contains(roleDto.RoleId))
+            // Fetch all permissions mentioned in the request to validate them in bulk
+            var allPermissionIdsInRequest = request.Roles.SelectMany(r => r.PermissionIds).Distinct().ToList();
+            var existingPermissionIds = (await _permissionRepository.GetByIdsAsync(allPermissionIdsInRequest, cancellationToken))
+                .Select(p => p.PermissionId)
+                .ToHashSet();
+
+            var rolesToCreate = new List<Role>();
+            foreach (var roleDto in request.Roles.DistinctBy(r => r.RoleId))
             {
-                _logger.LogDebug("Role {RoleId} already exists, skipping", roleDto.RoleId);
-                continue;
-            }
+                // Validate role ID format: roles.{service}.{role-name} (GCP style)
+                if (!roleDto.RoleId.StartsWith($"roles.{request.ServiceName}."))
+                {
+                    _logger.LogWarning("Skipping role {RoleId} because it does not start with roles.{ServiceName}. (GCP format required)",
+                        roleDto.RoleId, request.ServiceName);
+                    continue;
+                }
 
-            // Verify all permissions exist using local cache
-            foreach (var permissionId in roleDto.PermissionIds)
-            {
-                if (!existingPermissionIds.Contains(permissionId))
-                    throw new InvalidOperationException($"Permission {permissionId} does not exist");
-            }
+                // Check if role already exists using local cache
+                if (existingRoleIds.Contains(roleDto.RoleId))
+                {
+                    _logger.LogDebug("Role {RoleId} already exists, skipping", roleDto.RoleId);
+                    continue;
+                }
 
-            // Extract role name from RoleId (format: roles.service.role-name -> role-name)
-            var roleName = roleDto.RoleId.Split('.').LastOrDefault() ?? roleDto.RoleId;
+                // Verify all permissions exist using local cache
+                bool allPermissionsExist = true;
+                foreach (var permissionId in roleDto.PermissionIds)
+                {
+                    if (!existingPermissionIds.Contains(permissionId))
+                    {
+                        _logger.LogWarning("Skipping role {RoleId} because referenced permission {PermissionId} does not exist",
+                            roleDto.RoleId, permissionId);
+                        allPermissionsExist = false;
+                        break;
+                    }
+                }
 
-            var role = new Role
-            {
-                RoleId = roleDto.RoleId,
-                RoleName = roleName,
-                ServiceName = request.ServiceName,
-                Description = roleDto.Description,
-                IsCustom = roleDto.IsCustom,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                RolePermissions = roleDto.PermissionIds.Select(pid => new RolePermission
+                if (!allPermissionsExist)
+                {
+                    continue;
+                }
+
+                // Extract role name from RoleId (format: roles.service.role-name -> role-name)
+                var roleName = roleDto.RoleId.Split('.').LastOrDefault() ?? roleDto.RoleId;
+
+                var role = new Role
                 {
                     RoleId = roleDto.RoleId,
-                    PermissionId = pid
-                }).ToList()
-            };
+                    RoleName = roleName,
+                    ServiceName = request.ServiceName,
+                    Description = roleDto.Description,
+                    IsCustom = roleDto.IsCustom,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    RolePermissions = roleDto.PermissionIds.Select(pid => new RolePermission
+                    {
+                        RoleId = roleDto.RoleId,
+                        PermissionId = pid
+                    }).ToList()
+                };
 
-            rolesToCreate.Add(role);
-        }
-
-        if (rolesToCreate.Any())
-        {
-            foreach (var role in rolesToCreate)
-            {
-                await _roleRepository.CreateAsync(role, cancellationToken);
+                rolesToCreate.Add(role);
             }
-            _logger.LogInformation("Registered {Count} roles for service {ServiceName}", rolesToCreate.Count, request.ServiceName);
-        }
 
-        // Return all roles for the service
-        return await GetByServiceAsync(request.ServiceName, cancellationToken);
+            if (rolesToCreate.Any())
+            {
+                await _roleRepository.CreateManyAsync(rolesToCreate, cancellationToken);
+                _logger.LogInformation("Registered {Count} roles for service {ServiceName}", rolesToCreate.Count, request.ServiceName);
+            }
+
+            // Return all roles for the service (existing + newly created) without re-querying
+            var allRoles = existingRolesFromDb.Concat(rolesToCreate);
+            return allRoles.Select(MapToResponse);
+        }
+        finally
+        {
+            _registrationSemaphore.Release();
+        }
     }
 
     /// <inheritdoc />
@@ -324,6 +346,16 @@ public class RoleService : IRoleService
 
         // T116: Publish role updated event
         var roleUpdatedEvent = new RoleUpdatedEvent(
+            MessageId: Guid.NewGuid(),
+            MessageName: nameof(RoleUpdatedEvent),
+            MessageType: MessageType.Event,
+            MessageVersion: "1.0.0",
+            PublishedBy: "iam",
+            ConsumedBy: [],
+            CorrelationId: Guid.NewGuid(),
+            CausationId: null,
+            OccurredAtUtc: DateTimeOffset.UtcNow,
+            IsPublic: false,
             RoleId: roleId,
             ServiceName: role.ServiceName ?? string.Empty,
             UpdatedAt: DateTimeOffset.UtcNow
