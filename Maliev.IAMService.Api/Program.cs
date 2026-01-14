@@ -1,4 +1,3 @@
-#pragma warning disable CA1848 // For improved performance, use the LoggerMessage delegates
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
 using Maliev.IAMService.Api.Services;
@@ -16,7 +15,7 @@ var bootstrapLogger = loggerFactory.CreateLogger("Program");
 
 try
 {
-    bootstrapLogger.LogInformation("Starting IAM Service host");
+    Log.StartingHost(bootstrapLogger, "IAM Service");
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -137,6 +136,7 @@ try
     });
 
     var app = builder.Build();
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
     // ===== HTTP Request Pipeline =====
     app.UseStandardMiddleware();
@@ -242,11 +242,12 @@ try
     // ===== Controller Routes =====
     app.MapControllers();
 
+    Log.ServiceStarted(logger, "IAM Service");
     app.Run();
 }
 catch (Exception ex)
 {
-    bootstrapLogger.LogCritical(ex, "IAM Service host terminated unexpectedly during startup");
+    Log.HostTerminated(bootstrapLogger, ex, "IAM Service");
     throw;
 }
 finally
@@ -258,4 +259,17 @@ finally
 /// Main entry point for the application.
 /// Exposed for integration testing.
 /// </summary>
-public partial class Program { }
+public partial class Program
+{
+    internal static partial class Log
+    {
+        [LoggerMessage(Level = LogLevel.Information, Message = "Starting {ServiceName} host")]
+        public static partial void StartingHost(ILogger logger, string serviceName);
+
+        [LoggerMessage(Level = LogLevel.Critical, Message = "{ServiceName} host terminated unexpectedly during startup")]
+        public static partial void HostTerminated(ILogger logger, Exception ex, string serviceName);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "{ServiceName} started successfully")]
+        public static partial void ServiceStarted(ILogger logger, string serviceName);
+    }
+}
