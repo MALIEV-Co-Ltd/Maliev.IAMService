@@ -15,7 +15,7 @@ var bootstrapLogger = loggerFactory.CreateLogger("Program");
 
 try
 {
-    Log.StartingHost(bootstrapLogger, "IAM Service");
+    Program.Log.StartingHost(bootstrapLogger, "IAM Service");
 
     var builder = WebApplication.CreateBuilder(args);
 
@@ -242,12 +242,12 @@ try
     // ===== Controller Routes =====
     app.MapControllers();
 
-    Log.ServiceStarted(logger, "IAM Service");
+    Program.Log.ServiceStarted(logger, "IAM Service");
     app.Run();
 }
 catch (Exception ex)
 {
-    Log.HostTerminated(bootstrapLogger, ex, "IAM Service");
+    Program.Log.HostTerminated(bootstrapLogger, ex, "IAM Service");
     throw;
 }
 finally
