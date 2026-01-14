@@ -1,3 +1,4 @@
+#pragma warning disable CA1848 // For improved performance, use the LoggerMessage delegates
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
 using Maliev.IAMService.Api.Services;
