@@ -36,11 +36,19 @@ public class DatabaseSeeder
         // Read from configuration (user secrets in dev, environment variables in production)
         var testEmail = _configuration["TestUser:Email"];
         var testPrincipalId = _configuration["TestUser:PrincipalId"];
+        var testDisplayName = _configuration["TestUser:DisplayName"];
+        var linkedService = _configuration["TestUser:LinkedService"] ?? "EmployeeService";
 
         if (string.IsNullOrEmpty(testEmail) || string.IsNullOrEmpty(testPrincipalId))
         {
             _logger.LogWarning("Test user configuration not found in secrets, skipping seed");
             return;
+        }
+
+        if (string.IsNullOrEmpty(testDisplayName))
+        {
+            _logger.LogWarning("TestUser:DisplayName not configured, using email as display name");
+            testDisplayName = testEmail;
         }
 
         var principalGuid = Guid.Parse(testPrincipalId);
@@ -62,9 +70,9 @@ public class DatabaseSeeder
                 PrincipalId = principalGuid,
                 PrincipalType = "user",
                 Email = testEmail,
-                DisplayName = "Natthapol Vanasrivilai",
+                DisplayName = testDisplayName,
                 IsActive = true,
-                LinkedService = "EmployeeService",
+                LinkedService = linkedService,
                 LinkedEntityId = null, // Will be set by EmployeeService after employee creation
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
