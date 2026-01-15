@@ -38,6 +38,22 @@ public interface IRoleRepository
     Task<IEnumerable<Role>> GetCustomRolesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Retrieves roles by a list of their unique identifiers asynchronously.
+    /// </summary>
+    /// <param name="roleIds">The list of role identifiers.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A collection of roles.</returns>
+    Task<IEnumerable<Role>> GetByIdsAsync(IEnumerable<string> roleIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Retrieves permissions associated with multiple roles asynchronously.
+    /// </summary>
+    /// <param name="roleIds">The list of role identifiers.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A collection of role-permission mappings.</returns>
+    Task<IEnumerable<RolePermission>> GetPermissionsForRolesAsync(IEnumerable<string> roleIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates a new role asynchronously.
     /// </summary>
     /// <param name="role">The role to create.</param>

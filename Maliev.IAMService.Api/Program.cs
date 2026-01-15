@@ -44,6 +44,7 @@ try
     builder.Services.AddScoped<IBindingRepository, BindingRepository>();
     builder.Services.AddScoped<IAuditRepository, AuditRepository>();
     builder.Services.AddScoped<IServiceAccountApiKeyRepository, ServiceAccountApiKeyRepository>();
+    builder.Services.AddScoped<DatabaseSeeder>();
 
     // ===== Infrastructure Services =====
     // RSA key provider as Singleton to ensure consistent JWT signing key across all requests
@@ -71,6 +72,7 @@ try
         x.AddConsumer<Maliev.IAMService.Api.Events.PrincipalRoleRevokedEventConsumer>();
         x.AddConsumer<Maliev.IAMService.Api.Events.RoleUpdatedEventConsumer>();
         x.AddConsumer<Maliev.IAMService.Api.Consumers.PermissionRegistrationRequestConsumer>();
+        x.AddConsumer<Maliev.IAMService.Api.Consumers.EmployeeCreatedConsumer>();
     });
 
     // --- API Configuration ---
@@ -245,7 +247,7 @@ try
             scope.ServiceProvider.GetRequiredService<ILogger<Maliev.IAMService.Data.DatabaseSeeder>>()
         );
 
-        await seeder.SeedAllAsync();
+        await seeder.SeedDevelopmentDataAsync();
     }
 
     // ===== Controller Routes =====

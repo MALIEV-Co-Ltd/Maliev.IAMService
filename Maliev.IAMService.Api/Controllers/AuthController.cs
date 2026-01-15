@@ -136,7 +136,6 @@ public class AuthController : ControllerBase
     /// <returns>New JWT access token, new refresh token, and expiration details.</returns>
     [HttpPost("token/refresh")]
     [EnableRateLimiting("token_limit")]
-    [RequirePermission(IAMPermissions.AuthRefreshToken)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
         try

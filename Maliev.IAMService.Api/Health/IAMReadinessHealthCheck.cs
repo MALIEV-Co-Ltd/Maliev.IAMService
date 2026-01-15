@@ -29,10 +29,10 @@ public class IAMReadinessHealthCheck : IHealthCheck
             return Task.FromResult(HealthCheckResult.Healthy("IAM service is fully initialized and ready to accept registrations"));
         }
 
-        // Report as Degraded (not Unhealthy) during initialization to allow service to start
-        // This prevents Aspire from marking the service as failed during normal startup
+        // Report as Unhealthy during initialization.
+        // This ensures dependent services wait for IAM to be fully ready before proceeding with registrations.
         var message = $"IAM service is initializing. Progress: {_tracker.GetProgress()}";
-        return Task.FromResult(HealthCheckResult.Degraded(message));
+        return Task.FromResult(HealthCheckResult.Unhealthy(message));
     }
 }
 
