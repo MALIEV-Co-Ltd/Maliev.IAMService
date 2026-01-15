@@ -247,7 +247,7 @@ try
             scope.ServiceProvider.GetRequiredService<ILogger<Maliev.IAMService.Data.DatabaseSeeder>>()
         );
 
-        await seeder.SeedAllAsync();
+        await seeder.SeedDevelopmentDataAsync();
     }
 
     // ===== Controller Routes =====

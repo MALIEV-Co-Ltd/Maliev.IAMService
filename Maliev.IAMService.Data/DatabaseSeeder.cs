@@ -14,6 +14,8 @@ public class DatabaseSeeder
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
 
+    private static readonly Guid SystemPrincipalId = Guid.Empty;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DatabaseSeeder"/> class.
     /// </summary>
@@ -166,7 +168,7 @@ public class DatabaseSeeder
     public async Task SeedPlatformOwnerAsync()
     {
         const string platformOwnerRoleId = "roles.platform.owner";
-        var ownerEmail = "natthapol.vanasrivilai@maliev.com";
+        var ownerEmail = _configuration["PlatformOwnerEmail"] ?? "natthapol.vanasrivilai@maliev.com";
 
         try
         {
@@ -218,7 +220,7 @@ public class DatabaseSeeder
                         BindingId = Guid.NewGuid(),
                         PrincipalId = ownerPrincipal.PrincipalId,
                         RoleId = platformOwnerRoleId,
-                        GrantedBy = Guid.Empty,
+                        GrantedBy = SystemPrincipalId,
                         GrantedAt = DateTime.UtcNow
                     });
                     await _context.SaveChangesAsync();
@@ -419,13 +421,5 @@ public class DatabaseSeeder
         await SeedPlatformOwnerAsync();
         await SeedSystemServicesAsync();
         await SeedGeometryServiceAsync();
-    }
-
-    /// <summary>
-    /// Seeds all development data.
-    /// </summary>
-    public async Task SeedAllAsync()
-    {
-        await SeedDevelopmentDataAsync();
     }
 }
