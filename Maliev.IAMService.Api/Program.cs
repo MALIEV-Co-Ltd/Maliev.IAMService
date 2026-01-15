@@ -237,6 +237,15 @@ try
 
             await dbContext.SaveChangesAsync();
         }
+
+        // Seed test principal for employee authentication testing
+        var seeder = new Maliev.IAMService.Data.DatabaseSeeder(
+            scope.ServiceProvider.GetRequiredService<IAMDbContext>(),
+            scope.ServiceProvider.GetRequiredService<IConfiguration>(),
+            scope.ServiceProvider.GetRequiredService<ILogger<Maliev.IAMService.Data.DatabaseSeeder>>()
+        );
+
+        await seeder.SeedAllAsync();
     }
 
     // ===== Controller Routes =====
