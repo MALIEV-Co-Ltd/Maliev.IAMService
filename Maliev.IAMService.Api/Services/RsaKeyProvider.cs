@@ -68,21 +68,14 @@ public class RsaKeyProvider : IRsaKeyProvider
     private RSA LoadOrCreateRsaKey(IConfiguration configuration)
     {
         var keyBase64 = configuration["Jwt:PrivateKey"];
+        var isProduction = configuration["ASPNETCORE_ENVIRONMENT"] == "Production";
 
         if (!string.IsNullOrEmpty(keyBase64))
         {
             try
             {
-                // Decode Base64-encoded PEM
-                var privateKeyBytes = Convert.FromBase64String(keyBase64);
-                var privateKeyString = Encoding.UTF8.GetString(privateKeyBytes);
-
-                // Extract the base64 content between PEM headers
-                var lines = privateKeyString.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                var base64Content = string.Join("", lines.Where(l => !l.StartsWith("-----")));
-
-                // Decode the PKCS#8 key bytes
-                var keyBytes = Convert.FromBase64String(base64Content);
+                // T208: Simplify parsing - expect Base64-encoded PKCS#8 DER bytes directly
+                var keyBytes = Convert.FromBase64String(keyBase64);
 
                 // Import RSA private key using PKCS#8 format
                 var rsa = RSA.Create();
@@ -93,13 +86,23 @@ public class RsaKeyProvider : IRsaKeyProvider
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to load RSA private key from configuration, generating new key");
+                _logger.LogWarning(ex, "Failed to load RSA private key from configuration");
+                if (isProduction)
+                {
+                    throw new InvalidOperationException("Failed to load mandatory Jwt:PrivateKey in Production environment.", ex);
+                }
             }
         }
 
-        // Generate new 2048-bit RSA key
+        // T209: Prevent random key generation in Production to avoid service inconsistency
+        if (isProduction)
+        {
+            throw new InvalidOperationException("Jwt:PrivateKey must be configured in Production environment to ensure consistent token signing across instances.");
+        }
+
+        // Generate new 2048-bit RSA key for non-production environments
         var newRsa = RSA.Create(2048);
-        _logger.LogWarning("Generated new RSA key for JWT signing. This key should be persisted in configuration.");
+        _logger.LogWarning("Generated new RSA key for JWT signing. This key should be persisted in configuration for consistency.");
 
         return newRsa;
     }

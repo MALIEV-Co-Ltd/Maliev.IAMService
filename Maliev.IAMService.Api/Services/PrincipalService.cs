@@ -100,6 +100,13 @@ public interface IPrincipalService
     Task<IEnumerable<ServiceAccountResponse>> GetServiceAccountsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Retrieves all principals in the system.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Collection of all principals.</returns>
+    Task<IEnumerable<PrincipalResponse>> GetPrincipalsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Effective permissions response with deduplicated permissions and role attribution.
     /// </summary>
     Task<EffectivePermissionsResponse> GetEffectivePermissionsAsync(Guid principalId, string? resourcePath, CancellationToken cancellationToken = default);
@@ -162,6 +169,14 @@ public class PrincipalService : IPrincipalService
             return guid;
         }
 
+        // T210: Cache principal resolution (Email/Name -> GUID) for 1 hour
+        var cacheKey = $"iam:principal_resolution:{principalId.ToLowerInvariant()}";
+        var cachedGuid = await _cacheService.GetAsync<Guid?>(cacheKey, cancellationToken);
+        if (cachedGuid.HasValue)
+        {
+            return cachedGuid.Value;
+        }
+
         // Try to resolve by email (for users) or name (for service accounts)
         var principal = await _principalRepository.GetByEmailAsync(principalId, cancellationToken);
         if (principal == null)
@@ -175,6 +190,8 @@ public class PrincipalService : IPrincipalService
         {
             throw new InvalidOperationException($"Principal '{principalId}' could not be resolved to a GUID.");
         }
+
+        await _cacheService.SetAsync(cacheKey, principal.PrincipalId, TimeSpan.FromHours(1), cancellationToken);
 
         return principal.PrincipalId;
     }
@@ -389,6 +406,24 @@ public class PrincipalService : IPrincipalService
     }
 
     /// <inheritdoc />
+    public async Task<IEnumerable<PrincipalResponse>> GetPrincipalsAsync(CancellationToken cancellationToken = default)
+    {
+        var principals = await _principalRepository.GetAllAsync(cancellationToken);
+        return principals.Select(p => new PrincipalResponse
+        {
+            PrincipalId = p.PrincipalId,
+            PrincipalType = p.PrincipalType,
+            Email = p.Email,
+            DisplayName = p.DisplayName,
+            LinkedService = p.LinkedService,
+            LinkedEntityId = p.LinkedEntityId,
+            IsActive = p.IsActive,
+            CreatedAt = p.CreatedAt,
+            UpdatedAt = p.UpdatedAt
+        });
+    }
+
+    /// <inheritdoc />
     public async Task<EffectivePermissionsResponse> GetEffectivePermissionsAsync(
         Guid principalId,
         string? resourcePath,
@@ -432,16 +467,22 @@ public class PrincipalService : IPrincipalService
         // Get all unique role IDs
         var roleIds = activeBindings.Select(b => b.RoleId).Distinct().ToList();
 
+        // T206: Bulk fetch all relevant roles and permissions to avoid N+1 queries
+        var roles = await _roleRepository.GetByIdsAsync(roleIds, cancellationToken);
+        var allRolePermissions = await _roleRepository.GetPermissionsForRolesAsync(roleIds, cancellationToken);
+
+        // Map to dictionaries for O(1) lookup
+        var rolesMap = roles.ToDictionary(r => r.RoleId);
+
         // Dictionary to track permissions and which roles grant them
         var permissionRoleMap = new Dictionary<string, HashSet<string>>();
         var permissionBindingMap = new Dictionary<string, List<string?>>();
 
         foreach (var roleId in roleIds)
         {
-            var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
-            if (role == null) continue;
+            if (!rolesMap.TryGetValue(roleId, out var role)) continue;
 
-            var rolePermissions = await _roleRepository.GetRolePermissionsAsync(roleId, cancellationToken);
+            var rolePermissions = allRolePermissions.Where(rp => rp.RoleId == roleId).Select(rp => rp.Permission);
             var relevantBindings = activeBindings.Where(b => b.RoleId == roleId);
 
             foreach (var permission in rolePermissions)
@@ -462,27 +503,30 @@ public class PrincipalService : IPrincipalService
             }
         }
 
+        // T207: Bulk fetch all permission entities to avoid N+1 queries in the loop below
+        var uniquePermissionIds = permissionRoleMap.Keys.ToList();
+        var permissionEntities = await _permissionRepository.GetByIdsAsync(uniquePermissionIds, cancellationToken);
+        var permissionsMap = permissionEntities.ToDictionary(p => p.PermissionId);
+
         // Build effective permissions list with deduplication
         var effectivePermissions = new List<EffectivePermissionDto>();
 
-        foreach (var permissionName in permissionRoleMap.Keys)
+        foreach (var permissionId in uniquePermissionIds)
         {
-            var permission = await _permissionRepository.GetByIdAsync(permissionName, cancellationToken);
-            if (permission == null) continue;
+            if (!permissionsMap.TryGetValue(permissionId, out var permission)) continue;
 
-            var grantedByRoleIds = permissionRoleMap[permissionName];
+            var grantedByRoleIds = permissionRoleMap[permissionId];
             var roleNames = new List<string>();
-            foreach (var roleId in grantedByRoleIds)
+            foreach (var rId in grantedByRoleIds)
             {
-                var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
-                if (role != null)
+                if (rolesMap.TryGetValue(rId, out var r))
                 {
-                    roleNames.Add(role.RoleName);
+                    roleNames.Add(r.RoleName);
                 }
             }
 
             // T152: Determine if permission is scoped
-            var resourcePaths = permissionBindingMap[permissionName];
+            var resourcePaths = permissionBindingMap[permissionId];
             var distinctPaths = resourcePaths.Where(p => !string.IsNullOrEmpty(p)).Distinct().Cast<string>().ToList();
             var isScoped = distinctPaths.Any();
 

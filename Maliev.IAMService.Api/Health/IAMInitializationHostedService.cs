@@ -33,12 +33,33 @@ public class IAMInitializationHostedService : IHostedService
     /// </summary>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _applicationLifetime.ApplicationStarted.Register(() =>
+        // Use a background task to avoid blocking startup if ApplicationStarted takes time
+        _ = Task.Run(async () =>
         {
-            _logger.LogInformation("Application fully started, marking IAM service as initialized");
-            _tracker.MarkMassTransitStarted();
-            _tracker.MarkApiReady();
-        });
+            try
+            {
+                _logger.LogInformation("Waiting for application to be ready to mark IAM as initialized...");
+
+                // Wait for application to start
+                var tcs = new TaskCompletionSource();
+                using var reg = _applicationLifetime.ApplicationStarted.Register(() => tcs.TrySetResult());
+
+                if (_applicationLifetime.ApplicationStarted.IsCancellationRequested)
+                {
+                    tcs.TrySetResult();
+                }
+
+                await tcs.Task;
+
+                _logger.LogInformation("Application fully started, marking IAM service as initialized");
+                _tracker.MarkMassTransitStarted();
+                _tracker.MarkApiReady();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during IAM initialization tracking");
+            }
+        }, cancellationToken);
 
         return Task.CompletedTask;
     }

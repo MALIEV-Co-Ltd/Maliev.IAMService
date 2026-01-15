@@ -26,6 +26,17 @@ public class RoleRepository : IRoleRepository
         await _context.Roles.Include(r => r.RolePermissions).ToListAsync(cancellationToken);
 
     /// <inheritdoc/>
+    public async Task<IEnumerable<Role>> GetByIdsAsync(IEnumerable<string> roleIds, CancellationToken cancellationToken = default) =>
+        await _context.Roles.Where(r => roleIds.Contains(r.RoleId)).ToListAsync(cancellationToken);
+
+    /// <inheritdoc/>
+    public async Task<IEnumerable<RolePermission>> GetPermissionsForRolesAsync(IEnumerable<string> roleIds, CancellationToken cancellationToken = default) =>
+        await _context.RolePermissions
+            .Where(rp => roleIds.Contains(rp.RoleId))
+            .Include(rp => rp.Permission)
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc/>
     public async Task<IEnumerable<Role>> GetByServiceAsync(string serviceName, CancellationToken cancellationToken = default) =>
         await _context.Roles.Where(r => r.ServiceName == serviceName).ToListAsync(cancellationToken);
 

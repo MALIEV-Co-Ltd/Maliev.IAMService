@@ -36,9 +36,9 @@ public class PermissionsController : ControllerBase
     /// Registers new permissions for a service.
     /// </summary>
     /// <remarks>
-    /// This endpoint is used by microservices during their startup phase to declare the granular permissions they define. 
+    /// This endpoint is used by microservices during their startup phase to declare the granular permissions they define.
     /// Permissions must follow the `{service}.{resource}.{action}` format.
-    /// 
+    ///
     /// **Security:** This endpoint requires authorization to ensure only Maliev services can register permissions.
     /// </remarks>
     /// <param name="request">Permission registration request containing service name and permission definitions.</param>
@@ -48,7 +48,7 @@ public class PermissionsController : ControllerBase
     /// <response code="400">If the permission format is invalid or service name mismatch occurs.</response>
     /// <response code="409">If a permission with the same ID already exists.</response>
     [HttpPost("register")]
-    [Authorize] // Restricted to authorized services/principals
+    [RequirePermission(IAMPermissions.PermissionsCreate)]
     public async Task<IActionResult> RegisterPermissions([FromBody] RegisterPermissionsRequest request, CancellationToken cancellationToken)
     {
         try

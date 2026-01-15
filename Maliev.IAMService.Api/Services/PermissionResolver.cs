@@ -216,8 +216,7 @@ public class PermissionResolver : IPermissionResolver
     /// <summary>
     /// Generates a cache key for storing resolved permissions.
     /// Format: "iam:principal:{principalId}:permissions" for global permissions,
-    /// "iam:principal:{principalId}:permissions:path:{base64ResourcePath}" for resource-scoped.
-    /// Example: "iam:principal:123:permissions:path:cHJvamVjdHMvMTIz"
+    /// "iam:principal:{principalId}:permissions:path:{hash}" for resource-scoped.
     /// </summary>
     /// <param name="principalId">The principal ID.</param>
     /// <param name="resourcePath">Optional hierarchical resource path for scoping.</param>
@@ -227,9 +226,10 @@ public class PermissionResolver : IPermissionResolver
         var key = $"iam:principal:{principalId}:permissions";
         if (!string.IsNullOrEmpty(resourcePath))
         {
-            // T202: Use Base64 to ensure uniqueness and safe characters for Redis key
-            var encodedPath = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(resourcePath));
-            key += $":path:{encodedPath}";
+            // T211: Use SHA256 hash for resource path to ensure consistent key length in Redis
+            var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(resourcePath.ToLowerInvariant()));
+            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            key += $":path:{hash}";
         }
         return key;
     }
