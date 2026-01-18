@@ -15,6 +15,10 @@ namespace Maliev.IAMService.Tests.Integration;
 /// </summary>
 public class RolesControllerTests : BaseIntegrationTest
 {
+    public RolesControllerTests(TestWebApplicationFactory factory) : base(factory)
+    {
+    }
+
     /// <summary>
     /// Helper method to register test permissions directly via service layer.
     /// Used to seed test data for role tests.

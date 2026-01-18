@@ -1,10 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using Asp.Versioning;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Models.Responses;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
+using Maliev.IAMService.Api.Models.Responses;
+using Maliev.IAMService.Api.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Maliev.IAMService.Api.Controllers;
 

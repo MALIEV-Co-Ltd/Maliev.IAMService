@@ -1,5 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Maliev.IAMService.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Maliev.IAMService.Data.Repositories;
 

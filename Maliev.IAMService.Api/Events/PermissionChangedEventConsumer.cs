@@ -1,6 +1,6 @@
-using MassTransit;
 using Maliev.IAMService.Api.Services;
 using Maliev.MessagingContracts.Generated;
+using MassTransit;
 
 namespace Maliev.IAMService.Api.Events;
 

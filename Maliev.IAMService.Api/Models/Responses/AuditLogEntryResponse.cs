@@ -1,5 +1,3 @@
-using System.Net;
-
 namespace Maliev.IAMService.Api.Models.Responses;
 
 /// <summary>

@@ -1,8 +1,8 @@
-using Maliev.IAMService.Data.Entities;
-using Maliev.IAMService.Data.Repositories;
-using Maliev.IAMService.Api.Validators;
 using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
+using Maliev.IAMService.Api.Validators;
+using Maliev.IAMService.Data.Entities;
+using Maliev.IAMService.Data.Repositories;
 using Maliev.MessagingContracts.Generated;
 using MassTransit;
 using System.Collections.Concurrent;
@@ -82,7 +82,7 @@ public class PermissionService : IPermissionService
         if (string.IsNullOrWhiteSpace(request.ServiceName))
             throw new ArgumentException("Service name is required", nameof(request.ServiceName));
 
-        // FAST PATH: If the request is empty or we've already processed a registration for this service 
+        // FAST PATH: If the request is empty or we've already processed a registration for this service
         // in this session, we can do a quick check to see if we can skip the heavy DB logic.
         // (Note: We still allow the full check if it's the first time or if force is implied).
 

@@ -17,6 +17,10 @@ namespace Maliev.IAMService.Tests.Integration;
 /// </summary>
 public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
 {
+    public PermissionRegistrationRequestConsumerTests(TestWebApplicationFactory factory) : base(factory)
+    {
+    }
+
     [Fact]
     public async Task ConsumeMessage_ValidPermissionsAndRoles_RegistersSuccessfully()
     {

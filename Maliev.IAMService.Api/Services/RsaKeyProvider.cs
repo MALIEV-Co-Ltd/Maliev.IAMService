@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
 
 namespace Maliev.IAMService.Api.Services;
 

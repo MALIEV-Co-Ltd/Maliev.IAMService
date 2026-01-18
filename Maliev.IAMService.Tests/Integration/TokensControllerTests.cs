@@ -14,11 +14,12 @@ namespace Maliev.IAMService.Tests.Integration;
 
 public class TokensControllerTests : BaseIntegrationTest
 {
-
-
-
+    public TokensControllerTests(TestWebApplicationFactory factory) : base(factory)
+    {
+    }
 
     private async Task<Guid> CreateTestPrincipal(string name)
+
     {
         var request = new CreateServiceAccountRequest
         {
