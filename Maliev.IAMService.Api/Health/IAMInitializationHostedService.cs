@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Hosting;
-
 namespace Maliev.IAMService.Api.Health;
 
 /// <summary>

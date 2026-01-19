@@ -1,13 +1,10 @@
+using Maliev.Aspire.ServiceDefaults;
+using Maliev.IAMService.Api.Health;
+using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Api.Health;
-using MassTransit;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Maliev.Aspire.ServiceDefaults;
-using Microsoft.Extensions.Logging;
+using System.Threading.RateLimiting;
 
 // Initialize bootstrap logging
 using var loggerFactory = LoggerFactory.Create(logBuilder => logBuilder.AddConsole());
@@ -159,9 +156,17 @@ try
     // ===== Rate Limiting =====
     app.UseRateLimiter();
 
-    // Run migrations on startup
-    await app.MigrateDatabaseAsync<IAMDbContext>();
-    initTracker.MarkDatabaseMigrationsComplete();
+    // Run migrations on startup (except in Testing environment where factory handles it)
+    if (!app.Environment.IsEnvironment("Testing"))
+    {
+        await app.MigrateDatabaseAsync<IAMDbContext>();
+        initTracker.MarkDatabaseMigrationsComplete();
+    }
+    else
+    {
+        initTracker.MarkDatabaseMigrationsComplete();
+    }
+
 
     // ===== Authentication & Authorization =====
     app.UseAuthentication();

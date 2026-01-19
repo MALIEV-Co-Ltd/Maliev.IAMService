@@ -1,10 +1,10 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
 using Asp.Versioning;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Api.Models.Requests;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
+using Maliev.IAMService.Api.Models.Requests;
+using Maliev.IAMService.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Maliev.IAMService.Api.Controllers;
 
@@ -38,7 +38,7 @@ public class RolesController : ControllerBase
     /// <remarks>
     /// Built-in roles are predefined by services and are generally immutable after registration.
     /// Each role must include a list of existing permission identifiers (e.g., `supplier.suppliers.read`).
-    /// 
+    ///
     /// **Security:** This endpoint requires authorization to ensure only Maliev services can register roles.
     /// </remarks>
     /// <param name="request">Role registration request containing service name and role definitions with permission mappings.</param>

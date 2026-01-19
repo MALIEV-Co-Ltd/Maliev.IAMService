@@ -1,8 +1,7 @@
-using MassTransit;
-using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Api.Models.Requests;
-using Maliev.Aspire.ServiceDefaults.IAM;
+using Maliev.IAMService.Api.Services;
 using Maliev.MessagingContracts.Generated;
+using MassTransit;
 
 namespace Maliev.IAMService.Api.Consumers;
 

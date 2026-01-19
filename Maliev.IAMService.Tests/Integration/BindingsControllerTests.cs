@@ -13,6 +13,10 @@ namespace Maliev.IAMService.Tests.Integration;
 
 public class BindingsControllerTests : BaseIntegrationTest
 {
+    public BindingsControllerTests(TestWebApplicationFactory factory) : base(factory)
+    {
+    }
+
 
 
 

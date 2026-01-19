@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Caching.Distributed;
-using System.Text.Json;
 using StackExchange.Redis;
+using System.Text.Json;
 
 namespace Maliev.IAMService.Api.Services;
 

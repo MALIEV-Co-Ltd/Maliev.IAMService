@@ -13,6 +13,10 @@ namespace Maliev.IAMService.Tests.Integration;
 
 public class PermissionsControllerTests : BaseIntegrationTest
 {
+    public PermissionsControllerTests(TestWebApplicationFactory factory) : base(factory)
+    {
+    }
+
 
 
 

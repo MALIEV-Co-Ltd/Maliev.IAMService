@@ -5,36 +5,20 @@ namespace Maliev.IAMService.Tests.Integration;
 
 /// <summary>
 /// Base class for all integration tests.
-/// Creates a fresh TestWebApplicationFactory for each test class to avoid state accumulation issues.
+/// Uses a shared TestWebApplicationFactory via XUnit collection fixture to avoid container overhead.
 /// Call CleanDatabaseAsync() at the start of each test method for test isolation.
 /// </summary>
-public abstract class BaseIntegrationTest : IAsyncLifetime
+[Collection("Integration Tests")]
+public abstract class BaseIntegrationTest
 {
-    protected HttpClient Client = null!;
-    protected TestWebApplicationFactory Factory = null!;
+    protected readonly HttpClient Client;
+    protected readonly TestWebApplicationFactory Factory;
 
-    /// <summary>
-    /// Called before first test in the class. Creates a new factory instance.
-    /// </summary>
-    public virtual async Task InitializeAsync()
+    protected BaseIntegrationTest(TestWebApplicationFactory factory)
     {
-        Factory = new TestWebApplicationFactory();
-        await Factory.InitializeAsync();
-
+        Factory = factory;
         // Use authenticated client with all IAM permissions for testing
         Client = Factory.CreateAuthenticatedClientWithAllPermissions();
-    }
-
-    /// <summary>
-    /// Called after all tests in the class complete. Disposes the factory and client.
-    /// </summary>
-    public virtual async Task DisposeAsync()
-    {
-        Client?.Dispose();
-        if (Factory != null)
-        {
-            await Factory.DisposeAsync();
-        }
     }
 
     /// <summary>

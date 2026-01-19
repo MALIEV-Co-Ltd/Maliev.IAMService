@@ -1,6 +1,4 @@
 using MassTransit;
-using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 
 namespace Maliev.IAMService.Api.Consumers;
 
