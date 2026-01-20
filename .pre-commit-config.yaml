@@ -19,7 +19,14 @@ repos:
     hooks:
       - id: dotnet-format
         name: dotnet format
-        entry: dotnet format
+        entry: dotnet format Maliev.IAMService.slnx
         language: system
         files: \.(cs|vb)$
+        pass_filenames: false
+
+      - id: verify-build
+        name: verify build
+        entry: dotnet build Maliev.IAMService.slnx -c Release
+        language: system
+        files: \.(cs|json|csproj|slnx)$
         pass_filenames: false
