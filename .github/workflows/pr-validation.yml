@@ -20,7 +20,7 @@ jobs:
         with:
           dotnet-version: "10.x"
 
-      - name: Switch to PackageReference for CI build
+      - name: Set SharedLibraryVersion format
         run: |
           # Determine version format based on target branch
           BASE_BRANCH="${{ github.base_ref }}"
@@ -29,27 +29,18 @@ jobs:
           else
             VERSION_FORMAT="1.0.*-*"
           fi
-
+          echo "VERSION_FORMAT=$VERSION_FORMAT" >> $GITHUB_ENV
           echo "Target branch is $BASE_BRANCH. Using version format: $VERSION_FORMAT"
 
-          # Replace ProjectReference with PackageReference in all service csproj files
-          find . -name "*.csproj" -type f -exec sed -i \
-            's|<ProjectReference Include=".*Maliev.Aspire.ServiceDefaults.*.csproj" />|<PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="'$VERSION_FORMAT'" />|g' \
-            {} \;
-          find . -name "*.csproj" -type f -exec sed -i \
-            's|<ProjectReference Include=".*Maliev.MessagingContracts.*.csproj" />|<PackageReference Include="Maliev.MessagingContracts" Version="'$VERSION_FORMAT'" />|g' \
-            {} \;
-          echo "Switched to PackageReference for ServiceDefaults and MessagingContracts"
-
       - name: Restore dependencies
-        run: dotnet restore Maliev.IAMService.sln
+        run: dotnet restore Maliev.IAMService.slnx -p:SharedLibraryVersion=${{ env.VERSION_FORMAT }}
         env:
           NUGET_USERNAME: ${{ github.actor }}
           NUGET_PASSWORD: ${{ secrets.GITOPS_PAT }}
 
       - name: Build
-        run: dotnet build Maliev.IAMService.sln --no-restore --configuration Release
+        run: dotnet build Maliev.IAMService.slnx --no-restore --configuration Release -p:SharedLibraryVersion=${{ env.VERSION_FORMAT }}
 
       - name: Test
-        run: dotnet test Maliev.IAMService.sln --no-build --configuration Release --verbosity normal
+        run: dotnet test Maliev.IAMService.slnx --no-build --configuration Release --verbosity normal -p:SharedLibraryVersion=${{ env.VERSION_FORMAT }}
         working-directory: ${{ github.workspace }}
