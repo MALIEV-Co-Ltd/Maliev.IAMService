@@ -116,6 +116,52 @@ public class PrincipalsController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves a single principal by its email address.
+    /// </summary>
+    /// <param name="email">The email address of the principal.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Principal details.</returns>
+    [HttpGet("by-email/{email}")]
+    public async Task<IActionResult> GetPrincipalByEmail(string email, CancellationToken cancellationToken)
+    {
+        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
+        var principals = await _principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 2. Standard Path: Check for iam.principals.read permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PrincipalsRead);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
+        var principal = await _principalService.GetByEmailAsync(email, cancellationToken);
+        if (principal == null)
+        {
+            return NotFound(new { error = $"Principal with email {email} not found" });
+        }
+
+        var response = new PrincipalResponse
+        {
+            PrincipalId = principal.PrincipalId,
+            PrincipalType = principal.PrincipalType,
+            Email = principal.Email,
+            DisplayName = principal.DisplayName,
+            LinkedService = principal.LinkedService,
+            LinkedEntityId = principal.LinkedEntityId,
+            IsActive = principal.IsActive,
+            CreatedAt = principal.CreatedAt,
+            UpdatedAt = principal.UpdatedAt
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Creates a new principal (user or service account).
     /// </summary>
     /// <param name="request">Principal creation request.</param>
