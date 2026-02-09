@@ -1,5 +1,7 @@
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
+using System.Text;
+
 
 namespace Maliev.IAMService.Api.Services;
 
@@ -74,14 +76,22 @@ public class RsaKeyProvider : IRsaKeyProvider
             try
             {
                 // T208: Simplify parsing - expect Base64-encoded PKCS#8 DER bytes directly
-                var keyBytes = Convert.FromBase64String(keyBase64);
-
-                // Import RSA private key using PKCS#8 format
+                // OR Base64-encoded PEM string
+                var decodedString = Encoding.UTF8.GetString(Convert.FromBase64String(keyBase64));
                 var rsa = RSA.Create();
-                rsa.ImportPkcs8PrivateKey(keyBytes, out _);
+
+                if (decodedString.Contains("BEGIN PRIVATE KEY"))
+                {
+                    rsa.ImportFromPem(decodedString);
+                }
+                else
+                {
+                    rsa.ImportPkcs8PrivateKey(Convert.FromBase64String(keyBase64), out _);
+                }
 
                 _logger.LogInformation("Loaded existing RSA private key for JWT signing");
                 return rsa;
+
             }
             catch (Exception ex)
             {

@@ -24,6 +24,8 @@ public class PrincipalRepository : IPrincipalRepository
     {
         return await _context.Principals
             .Include(p => p.RoleBindings)
+            .Include(p => p.PermissionBindings)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.PrincipalId == principalId, cancellationToken);
     }
 
@@ -32,8 +34,11 @@ public class PrincipalRepository : IPrincipalRepository
     {
         return await _context.Principals
             .Include(p => p.RoleBindings)
+            .Include(p => p.PermissionBindings)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(p => p.Email == email, cancellationToken);
     }
+
 
     /// <inheritdoc/>
     public async Task<Principal?> GetByLinkedEntityAsync(string linkedService, Guid linkedEntityId, CancellationToken cancellationToken = default)

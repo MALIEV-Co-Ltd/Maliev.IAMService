@@ -70,16 +70,32 @@ public class RolesController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Returns all roles (built-in and custom). If `serviceName` is provided, filters to roles owned by that service.
+    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
     /// </remarks>
     /// <param name="serviceName">Optional filter to retrieve roles for a specific service.</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
     /// <returns>List of roles, optionally filtered by service.</returns>
     /// <response code="200">Returns the requested roles.</response>
-    /// <response code="403">If the user lacks `iam.roles.list` permission.</response>
+    /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     [HttpGet]
-    [RequirePermission(IAMPermissions.RolesList)]
     public async Task<IActionResult> GetRoles([FromQuery] string? serviceName, CancellationToken cancellationToken)
     {
+        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 2. Standard Path: Check for iam.roles.list permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.RolesList);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(serviceName))
         {
             var roles = await _roleService.GetByServiceAsync(serviceName, cancellationToken);
@@ -90,22 +106,39 @@ public class RolesController : ControllerBase
         return Ok(allRoles);
     }
 
+
     /// <summary>
     /// Retrieves a single role by its unique identifier.
     /// </summary>
     /// <remarks>
     /// Fetches full details including the list of associated permission identifiers.
+    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
     /// </remarks>
     /// <param name="roleId">The unique identifier of the role (e.g., `roles.supplier.admin`).</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
     /// <returns>The requested role with its permissions.</returns>
     /// <response code="200">Returns the role details.</response>
-    /// <response code="403">If the user lacks `iam.roles.read` permission.</response>
+    /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     /// <response code="404">If the role ID is not found.</response>
     [HttpGet("{**roleId}")]
-    [RequirePermission(IAMPermissions.RolesRead)]
     public async Task<IActionResult> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
+        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 2. Standard Path: Check for iam.roles.read permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.RolesRead);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
         var role = await _roleService.GetByIdAsync(roleId, cancellationToken);
         if (role == null)
         {
@@ -113,6 +146,7 @@ public class RolesController : ControllerBase
         }
         return Ok(role);
     }
+
 
     /// <summary>
     /// Creates a new custom role.

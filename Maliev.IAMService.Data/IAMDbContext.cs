@@ -43,8 +43,13 @@ public class IAMDbContext : DbContext
     /// </summary>
     public DbSet<PrincipalRoleBinding> PrincipalRoleBindings { get; set; } = null!;
     /// <summary>
+    /// Gets or sets the PrincipalPermissionBindings DbSet.
+    /// </summary>
+    public DbSet<PrincipalPermissionBinding> PrincipalPermissionBindings { get; set; } = null!;
+    /// <summary>
     /// Gets or sets the ServiceAccountApiKeys DbSet.
     /// </summary>
+
     public DbSet<ServiceAccountApiKey> ServiceAccountApiKeys { get; set; } = null!;
     /// <summary>
     /// Gets or sets the IAMAuditLogs DbSet.
@@ -84,6 +89,12 @@ public class IAMDbContext : DbContext
             .HasIndex(prb => new { prb.PrincipalId, prb.RoleId, prb.ResourcePath })
             .IsUnique();
 
+        // Configure unique constraint for principal permission bindings
+        modelBuilder.Entity<PrincipalPermissionBinding>()
+            .HasIndex(ppb => new { ppb.PrincipalId, ppb.PermissionId, ppb.ResourcePath })
+            .IsUnique();
+
+
         // Configure indexes for performance
         modelBuilder.Entity<Permission>()
             .HasIndex(p => p.ServiceName);
@@ -103,8 +114,15 @@ public class IAMDbContext : DbContext
         modelBuilder.Entity<PrincipalRoleBinding>()
             .HasIndex(prb => prb.RoleId);
 
+        modelBuilder.Entity<PrincipalPermissionBinding>()
+            .HasIndex(ppb => ppb.PrincipalId);
+
+        modelBuilder.Entity<PrincipalPermissionBinding>()
+            .HasIndex(ppb => ppb.PermissionId);
+
         modelBuilder.Entity<PrincipalRoleBinding>()
             .HasIndex(prb => prb.ExpiresAt)
+
             .HasFilter("expires_at IS NOT NULL");
 
         modelBuilder.Entity<ServiceAccountApiKey>()
@@ -128,10 +146,10 @@ public class IAMDbContext : DbContext
 
         // Configure check constraints
         modelBuilder.Entity<Principal>()
-            .ToTable(t => t.HasCheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account')"));
+            .ToTable(t => t.HasCheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account', 'system')"));
 
         modelBuilder.Entity<Permission>()
-            .ToTable(t => t.HasCheckConstraint("CK_Permission_Format", "permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'"));
+            .ToTable(t => t.HasCheckConstraint("CK_Permission_Format", "permission_id = '*' OR permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'"));
 
         modelBuilder.Entity<Role>()
             .ToTable(t => t.HasCheckConstraint("CK_Role_Service", "(is_custom = TRUE) OR (service_name IS NOT NULL)"));
@@ -166,5 +184,18 @@ public class IAMDbContext : DbContext
             .WithMany(r => r.PrincipalBindings)
             .HasForeignKey(prb => prb.RoleId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PrincipalPermissionBinding>()
+            .HasOne(ppb => ppb.Principal)
+            .WithMany(p => p.PermissionBindings)
+            .HasForeignKey(ppb => ppb.PrincipalId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PrincipalPermissionBinding>()
+            .HasOne(ppb => ppb.Permission)
+            .WithMany(p => p.PrincipalBindings)
+            .HasForeignKey(ppb => ppb.PermissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
     }
 }

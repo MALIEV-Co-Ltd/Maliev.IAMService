@@ -98,8 +98,8 @@ public class PermissionResolver : IPermissionResolver
         // T091: Get active bindings (filtering expired ones)
         var bindings = await _bindingRepository.GetByPrincipalAsync(principalGuid, cancellationToken);
 
-        // T087: Resolve global roles
-        var globalBindings = bindings.Where(b => string.IsNullOrEmpty(b.ResourcePath)).ToList();
+        // T087: Resolve global roles (ResourcePath is null, empty, or "*")
+        var globalBindings = bindings.Where(b => string.IsNullOrEmpty(b.ResourcePath) || b.ResourcePath == "*").ToList();
 
         // T088: Resolve resource-scoped roles (match against resource path if provided)
         var scopedBindings = bindings.Where(b =>
@@ -126,6 +126,17 @@ public class PermissionResolver : IPermissionResolver
                 }
             }
         }
+
+        // T215: Merge Direct Permission Bindings
+        var directBindings = await _bindingRepository.GetDirectPermissionsByPrincipalAsync(principalGuid, cancellationToken);
+        foreach (var db in directBindings)
+        {
+            if (string.IsNullOrEmpty(db.ResourcePath) || MatchesResourcePath(db.ResourcePath, request.ResourcePath))
+            {
+                allPermissions.Add(db.PermissionId);
+            }
+        }
+
 
         var response = new ResolvePermissionsResponse
         {
@@ -155,7 +166,17 @@ public class PermissionResolver : IPermissionResolver
         };
 
         var resolved = await ResolvePermissionsAsync(resolveRequest, cancellationToken);
-        var allowed = resolved.Permissions.Contains(request.PermissionId);
+
+        // Support wildcard '*' permission or Platform Owner role for full access (Case-insensitive)
+        var allowed = resolved.Roles.Any(r => string.Equals(r, "roles.platform.owner", StringComparison.OrdinalIgnoreCase)) ||
+                      resolved.Permissions.Contains("*") ||
+                      resolved.Permissions.Contains(request.PermissionId);
+
+        if (!allowed)
+        {
+            _logger.LogWarning("Permission denied for Principal {PrincipalId}: {Permission}. Resolved Roles: {Roles}, Permissions Count: {Count}",
+                request.PrincipalId, request.PermissionId, string.Join(",", resolved.Roles), resolved.Permissions.Count);
+        }
 
         sw.Stop();
 
@@ -181,11 +202,15 @@ public class PermissionResolver : IPermissionResolver
     {
         // If no resource path requested, only global bindings match (which have null bindingPath)
         if (string.IsNullOrEmpty(requestPath))
-            return string.IsNullOrEmpty(bindingPath);
+            return string.IsNullOrEmpty(bindingPath) || bindingPath == "*";
 
         // If binding has no path, it doesn't match resource-scoped requests
         if (string.IsNullOrEmpty(bindingPath))
             return false;
+
+        // Global wildcard: "*" matches everything
+        if (bindingPath == "*")
+            return true;
 
         // T204: Hierarchical match (Inheritance)
         // A binding on "orgs/1" matches "orgs/1", "orgs/1/projects/2", etc.

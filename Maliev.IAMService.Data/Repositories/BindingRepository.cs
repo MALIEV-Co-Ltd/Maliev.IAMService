@@ -28,12 +28,27 @@ public class BindingRepository : IBindingRepository
             .ToListAsync(cancellationToken);
 
     /// <inheritdoc/>
+    public async Task<IEnumerable<PrincipalPermissionBinding>> GetDirectPermissionsByPrincipalAsync(Guid principalId, CancellationToken cancellationToken = default) =>
+        await _context.PrincipalPermissionBindings
+            .Where(ppb => ppb.PrincipalId == principalId && (ppb.ExpiresAt == null || ppb.ExpiresAt > DateTime.UtcNow))
+            .ToListAsync(cancellationToken);
+
+    /// <inheritdoc/>
     public async Task<PrincipalRoleBinding> CreateAsync(PrincipalRoleBinding binding, CancellationToken cancellationToken = default)
     {
         _context.PrincipalRoleBindings.Add(binding);
         await _context.SaveChangesAsync(cancellationToken);
         return binding;
     }
+
+    /// <inheritdoc/>
+    public async Task<PrincipalPermissionBinding> CreateDirectPermissionAsync(PrincipalPermissionBinding binding, CancellationToken cancellationToken = default)
+    {
+        _context.PrincipalPermissionBindings.Add(binding);
+        await _context.SaveChangesAsync(cancellationToken);
+        return binding;
+    }
+
 
     /// <inheritdoc/>
     public async Task DeleteAsync(Guid bindingId, CancellationToken cancellationToken = default)

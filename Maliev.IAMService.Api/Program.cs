@@ -4,7 +4,6 @@ using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
-using System.Threading.RateLimiting;
 
 // Initialize bootstrap logging
 using var loggerFactory = LoggerFactory.Create(logBuilder => logBuilder.AddConsole());
@@ -41,9 +40,9 @@ try
     builder.Services.AddScoped<IBindingRepository, BindingRepository>();
     builder.Services.AddScoped<IAuditRepository, AuditRepository>();
     builder.Services.AddScoped<IServiceAccountApiKeyRepository, ServiceAccountApiKeyRepository>();
-    builder.Services.AddScoped<DatabaseSeeder>();
 
     // ===== Infrastructure Services =====
+
     // RSA key provider as Singleton to ensure consistent JWT signing key across all requests
     builder.Services.AddSingleton<IRsaKeyProvider, RsaKeyProvider>();
     builder.Services.AddScoped<IPrincipalService, PrincipalService>();
@@ -58,7 +57,7 @@ try
     builder.Services.AddPermissionAuthorization();
 
     // ===== Redis Distributed Cache =====
-    builder.AddRedisDistributedCache(instanceName: "iam:");
+    builder.AddStandardCache("iam:"); // Redis + in-memory fallback, memory-optimized
     builder.Services.AddScoped<ICacheService, CacheService>();
 
     // ===== RabbitMQ with MassTransit =====
@@ -73,7 +72,7 @@ try
     });
 
     // --- API Configuration ---
-    builder.AddDefaultCors(); // CORS from CORS:AllowedOrigins config
+    builder.AddStandardCors(); // CORS with fail-fast validation
     builder.AddDefaultApiVersioning(); // API versioning with URL segment reader
 
     // ===== JWT Authentication =====
@@ -96,43 +95,9 @@ try
     // ===== Controllers =====
     builder.Services.AddControllers();
 
-    // ===== Rate Limiting =====
-    builder.Services.AddRateLimiter(options =>
-    {
-        // Custom policy for registration (no limit for internal platform traffic)
-        options.AddPolicy("registration_limit", httpContext =>
-            RateLimitPartition.GetNoLimiter("registration"));
-
-        // Custom policy for token endpoints (stricter)
-        options.AddPolicy("token_limit", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: "token_limit",
-                factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 100, // Increased for performance
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 0
-                }));
-
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-        {
-            // Platform internal traffic uses high limits
-            if (httpContext.Request.Headers.ContainsKey("X-Service-Name"))
-            {
-                return RateLimitPartition.GetNoLimiter("platform_internal");
-            }
-
-            return RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: "global_limit",
-                factory: partition => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 500, // Relaxed for local dev/testing
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 100
-                });
-        });
-    });
+    // ===== Rate Limiting (memory-optimized for low-spec nodes) =====
+    // Note: IAM Service uses standard rate limiting. Custom policies can be added via middleware if needed.
+    builder.AddStandardRateLimiting();
 
     var app = builder.Build();
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
@@ -172,91 +137,9 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    // Seed geometry-service principal for integration tests (Development/Testing only)
-    if (app.Environment.IsDevelopment())
-    {
-        using var scope = app.Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
-        var serviceName = "geometry-service";
-        var email = $"{serviceName}@serviceaccount.maliev.local";
-
-        // 1. Seed the permission first to satisfy FK constraint
-        var permissionId = "upload.files.upload";
-        if (!await dbContext.Permissions.AnyAsync(p => p.PermissionId == permissionId))
-        {
-            dbContext.Permissions.Add(new Maliev.IAMService.Data.Entities.Permission
-            {
-                PermissionId = permissionId,
-                ServiceName = "upload",
-                ResourceType = "files",
-                Action = "upload",
-                Description = "Upload files (Seed)",
-                RegisteredAt = DateTime.UtcNow
-            });
-            await dbContext.SaveChangesAsync();
-        }
-
-        // 2. Seed the principal
-        if (!await dbContext.Principals.AnyAsync(p => p.Email == email))
-        {
-            var principalId = Guid.NewGuid();
-            dbContext.Principals.Add(new Maliev.IAMService.Data.Entities.Principal
-            {
-                PrincipalId = principalId,
-                PrincipalType = "service_account",
-                Email = email,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            });
-
-            // 3. Grant upload.files.upload permission via a direct role binding
-            var roleId = "roles.system.geometry-service";
-            if (!await dbContext.Roles.AnyAsync(r => r.RoleId == roleId))
-            {
-                var role = new Maliev.IAMService.Data.Entities.Role
-                {
-                    RoleId = roleId,
-                    RoleName = "Geometry Service Role",
-                    Description = "System role for geometry service",
-                    ServiceName = "system",
-                    IsCustom = false,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                dbContext.Roles.Add(role);
-
-                dbContext.RolePermissions.Add(new Maliev.IAMService.Data.Entities.RolePermission
-                {
-                    RoleId = roleId,
-                    PermissionId = permissionId,
-                    AddedAt = DateTime.UtcNow
-                });
-            }
-
-            dbContext.PrincipalRoleBindings.Add(new Maliev.IAMService.Data.Entities.PrincipalRoleBinding
-            {
-                BindingId = Guid.NewGuid(),
-                PrincipalId = principalId,
-                RoleId = roleId,
-                GrantedBy = Guid.Empty,
-                GrantedAt = DateTime.UtcNow
-            });
-
-            await dbContext.SaveChangesAsync();
-        }
-
-        // Seed test principal for employee authentication testing
-        var seeder = new Maliev.IAMService.Data.DatabaseSeeder(
-            scope.ServiceProvider.GetRequiredService<IAMDbContext>(),
-            scope.ServiceProvider.GetRequiredService<IConfiguration>(),
-            scope.ServiceProvider.GetRequiredService<ILogger<Maliev.IAMService.Data.DatabaseSeeder>>()
-        );
-
-        await seeder.SeedDevelopmentDataAsync();
-    }
-
     // ===== Controller Routes =====
     app.MapControllers();
+
 
     Program.Log.ServiceStarted(logger, "IAM Service");
     app.Run();

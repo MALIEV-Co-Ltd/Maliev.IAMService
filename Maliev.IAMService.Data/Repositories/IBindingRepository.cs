@@ -16,20 +16,36 @@ public interface IBindingRepository
     Task<PrincipalRoleBinding?> GetByIdAsync(Guid bindingId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Retrieves all bindings associated with a specific principal asynchronously.
+    /// Retrieves all role bindings associated with a specific principal asynchronously.
     /// </summary>
     /// <param name="principalId">The unique identifier of the principal.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A collection of bindings.</returns>
+    /// <returns>A collection of role bindings.</returns>
     Task<IEnumerable<PrincipalRoleBinding>> GetByPrincipalAsync(Guid principalId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Creates a new binding asynchronously.
+    /// Retrieves all direct permission bindings associated with a specific principal asynchronously.
+    /// </summary>
+    /// <param name="principalId">The unique identifier of the principal.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A collection of direct permission bindings.</returns>
+    Task<IEnumerable<PrincipalPermissionBinding>> GetDirectPermissionsByPrincipalAsync(Guid principalId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a new role binding asynchronously.
     /// </summary>
     /// <param name="binding">The binding to create.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The created binding.</returns>
     Task<PrincipalRoleBinding> CreateAsync(PrincipalRoleBinding binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a new direct permission binding asynchronously.
+    /// </summary>
+    /// <param name="binding">The binding to create.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The created binding.</returns>
+    Task<PrincipalPermissionBinding> CreateDirectPermissionAsync(PrincipalPermissionBinding binding, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a binding by its unique identifier asynchronously.

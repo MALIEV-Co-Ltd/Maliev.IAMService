@@ -71,17 +71,33 @@ public class PermissionsController : ControllerBase
     /// <remarks>
     /// Used by administrators or system explorers to view the available permissions in the platform.
     /// When `serviceName` is provided, only permissions owned by that service are returned.
+    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
     /// </remarks>
     /// <param name="serviceName">Optional filter to retrieve permissions for a specific service. If null or empty, returns all permissions.</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
     /// <returns>List of permissions, optionally filtered by service.</returns>
     /// <response code="200">Returns the requested permissions.</response>
     /// <response code="401">If the user is not authenticated.</response>
-    /// <response code="403">If the user lacks `iam.permissions.list` permission.</response>
+    /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     [HttpGet]
-    [RequirePermission(IAMPermissions.PermissionsList)]
     public async Task<IActionResult> GetPermissions([FromQuery] string? serviceName, CancellationToken cancellationToken)
     {
+        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 2. Standard Path: Check for iam.permissions.list permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PermissionsList);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(serviceName))
         {
             var permissions = await _permissionService.GetByServiceAsync(serviceName, cancellationToken);
@@ -92,23 +108,40 @@ public class PermissionsController : ControllerBase
         return Ok(allPermissions);
     }
 
+
     /// <summary>
     /// Retrieves a single permission by its unique identifier.
     /// </summary>
     /// <remarks>
     /// Returns detailed metadata about a specific permission identifier.
+    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
     /// </remarks>
     /// <param name="permissionId">The unique permission identifier to retrieve (e.g., "auth.users.read").</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
     /// <returns>The requested permission.</returns>
     /// <response code="200">Returns the requested permission details.</response>
     /// <response code="401">If the user is not authenticated.</response>
-    /// <response code="403">If the user lacks `iam.permissions.read` permission.</response>
+    /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     /// <response code="404">If the permission identifier is not found.</response>
     [HttpGet("{permissionId}")]
-    [RequirePermission(IAMPermissions.PermissionsRead)]
     public async Task<IActionResult> GetPermissionById(string permissionId, CancellationToken cancellationToken)
     {
+        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 2. Standard Path: Check for iam.permissions.read permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PermissionsRead);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
         var permission = await _permissionService.GetByIdAsync(permissionId, cancellationToken);
         if (permission == null)
         {
@@ -116,4 +149,5 @@ public class PermissionsController : ControllerBase
         }
         return Ok(permission);
     }
+
 }

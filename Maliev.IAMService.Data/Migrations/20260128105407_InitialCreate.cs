@@ -1,5 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
 using System.Net;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -29,7 +30,7 @@ namespace Maliev.IAMService.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_iamaudit_logs", x => x.log_id);
-                    table.CheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
+                    table.CheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\r\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\r\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
                 });
 
             migrationBuilder.CreateTable(
@@ -46,7 +47,7 @@ namespace Maliev.IAMService.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_permissions", x => x.permission_id);
-                    table.CheckConstraint("CK_Permission_Format", "permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'");
+                    table.CheckConstraint("CK_Permission_Format", "permission_id = '*' OR permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'");
                 });
 
             migrationBuilder.CreateTable(
@@ -86,6 +87,34 @@ namespace Maliev.IAMService.Data.Migrations
                 {
                     table.PrimaryKey("pk_roles", x => x.role_id);
                     table.CheckConstraint("CK_Role_Service", "(is_custom = TRUE) OR (service_name IS NOT NULL)");
+                });
+
+            migrationBuilder.CreateTable(
+                name: "principal_permission_bindings",
+                columns: table => new
+                {
+                    binding_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    principal_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    permission_id = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    resource_path = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: true),
+                    granted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_principal_permission_bindings", x => x.binding_id);
+                    table.ForeignKey(
+                        name: "fk_principal_permission_bindings_permissions_permission_id",
+                        column: x => x.permission_id,
+                        principalTable: "permissions",
+                        principalColumn: "permission_id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_principal_permission_bindings_principals_principal_id",
+                        column: x => x.principal_id,
+                        principalTable: "principals",
+                        principalColumn: "principal_id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -204,6 +233,22 @@ namespace Maliev.IAMService.Data.Migrations
                 column: "service_name");
 
             migrationBuilder.CreateIndex(
+                name: "ix_principal_permission_bindings_permission_id",
+                table: "principal_permission_bindings",
+                column: "permission_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_principal_permission_bindings_principal_id",
+                table: "principal_permission_bindings",
+                column: "principal_id");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_principal_permission_bindings_principal_id_permission_id_re~",
+                table: "principal_permission_bindings",
+                columns: new[] { "principal_id", "permission_id", "resource_path" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_principal_role_bindings_expires_at",
                 table: "principal_role_bindings",
                 column: "expires_at",
@@ -268,6 +313,9 @@ namespace Maliev.IAMService.Data.Migrations
         {
             migrationBuilder.DropTable(
                 name: "iamaudit_logs");
+
+            migrationBuilder.DropTable(
+                name: "principal_permission_bindings");
 
             migrationBuilder.DropTable(
                 name: "principal_role_bindings");

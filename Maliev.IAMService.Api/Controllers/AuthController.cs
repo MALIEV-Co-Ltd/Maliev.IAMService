@@ -3,6 +3,7 @@ using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
 using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Services;
+using Maliev.IAMService.Data.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -19,6 +20,7 @@ public class AuthController : ControllerBase
     private readonly IPermissionResolver _permissionResolver;
     private readonly ITokenService _tokenService;
     private readonly ILogger<AuthController> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AuthController"/> class.
@@ -26,48 +28,99 @@ public class AuthController : ControllerBase
     /// <param name="permissionResolver">Service for resolving and checking permissions.</param>
     /// <param name="tokenService">Service for JWT token operations.</param>
     /// <param name="logger">Logger instance.</param>
+    /// <param name="scopeFactory">Service scope factory for creating fresh DbContext instances.</param>
     public AuthController(
         IPermissionResolver permissionResolver,
         ITokenService tokenService,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        IServiceScopeFactory scopeFactory)
     {
         _permissionResolver = permissionResolver;
         _tokenService = tokenService;
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     /// <summary>
     /// Resolves all effective permissions for a principal, optionally scoped to a specific resource.
     /// Uses Redis caching with 5-minute TTL for optimal performance (target &lt;10ms).
+    /// Supports Development Bootstrap and Service Account bypass.
     /// </summary>
     /// <param name="request">The permission resolution request containing principal ID and optional resource scope.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of permissions granted to the principal.</returns>
     [HttpPost("resolve-permissions")]
-    [RequirePermission(IAMPermissions.AuthResolvePermissions)]
     public async Task<IActionResult> ResolvePermissions([FromBody] ResolvePermissionsRequest request, CancellationToken cancellationToken)
     {
-        var response = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
-        return Ok(response);
+        // 1. Service Account Bypass: Allow other services to resolve permissions for users
+        var userType = User.FindFirst("user_type")?.Value;
+        if (userType == "service")
+        {
+            var response = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
+            return Ok(response);
+        }
+
+        // 2. Development Bootstrap: Allow access if system has 1 or fewer users
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 3. Standard Path: Check for iam.auth.resolve-permissions permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.AuthResolvePermissions);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
+        var res = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
+        return Ok(res);
     }
 
     /// <summary>
     /// Checks if a principal has a specific permission, optionally scoped to a resource.
     /// Includes latency tracking and supports hierarchical resource matching.
+    /// Supports Development Bootstrap and Service Account bypass.
     /// </summary>
     /// <param name="request">The permission check request containing principal ID, permission ID, and optional resource scope.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Boolean result indicating if the permission is granted, along with latency metrics.</returns>
     [HttpPost("check-permission")]
-    [RequirePermission(IAMPermissions.AuthCheckPermission)]
     public async Task<IActionResult> CheckPermission([FromBody] CheckPermissionRequest request, CancellationToken cancellationToken)
     {
-        var response = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
+        // 1. Service Account Bypass: Allow other services to check permissions for users
+        var userType = User.FindFirst("user_type")?.Value;
+        if (userType == "service")
+        {
+            var response = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
+            return Ok(response);
+        }
+
+        // 2. Development Bootstrap: Allow access if system has 1 or fewer users
+        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
+        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
+
+        if (principals.Count() > 1)
+        {
+            // 3. Standard Path: Check for iam.auth.check-permission permission
+            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.AuthCheckPermission);
+
+            if (!authResult.Succeeded)
+            {
+                return Forbid();
+            }
+        }
+
+        var res = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
 
         _logger.LogInformation("Permission check completed in {LatencyMs}ms for principal {PrincipalId}, permission {PermissionId}, allowed: {Allowed}",
-            response.LatencyMs, request.PrincipalId, request.PermissionId, response.Allowed);
+            res.LatencyMs, request.PrincipalId, request.PermissionId, res.Allowed);
 
-        return Ok(response);
+        return Ok(res);
     }
 
     /// <summary>

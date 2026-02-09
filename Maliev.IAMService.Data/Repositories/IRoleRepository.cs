@@ -97,4 +97,11 @@ public interface IRoleRepository
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A collection of permissions.</returns>
     Task<IEnumerable<Permission>> GetRolePermissionsAsync(string roleId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Checks if a role is already being tracked by the database context.
+    /// </summary>
+    /// <param name="roleId">The unique identifier of the role.</param>
+    /// <returns>The tracked role if found; otherwise, null.</returns>
+    Role? GetTracked(string roleId);
 }

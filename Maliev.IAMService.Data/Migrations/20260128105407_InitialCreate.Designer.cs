@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Maliev.IAMService.Data.Migrations
 {
     [DbContext(typeof(IAMDbContext))]
-    [Migration("20260106142040_InitialCreate")]
+    [Migration("20260128105407_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -21,7 +21,7 @@ namespace Maliev.IAMService.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.1")
+                .HasAnnotation("ProductVersion", "10.0.2")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -87,7 +87,7 @@ namespace Maliev.IAMService.Data.Migrations
 
                     b.ToTable("iamaudit_logs", t =>
                         {
-                            t.HasCheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
+                            t.HasCheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\r\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\r\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
                         });
                 });
 
@@ -136,7 +136,7 @@ namespace Maliev.IAMService.Data.Migrations
 
                     b.ToTable("permissions", t =>
                         {
-                            t.HasCheckConstraint("CK_Permission_Format", "permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'");
+                            t.HasCheckConstraint("CK_Permission_Format", "permission_id = '*' OR permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'");
                         });
                 });
 
@@ -194,6 +194,50 @@ namespace Maliev.IAMService.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account')");
                         });
+                });
+
+            modelBuilder.Entity("Maliev.IAMService.Data.Entities.PrincipalPermissionBinding", b =>
+                {
+                    b.Property<Guid>("BindingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("binding_id");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("granted_at");
+
+                    b.Property<string>("PermissionId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("permission_id");
+
+                    b.Property<Guid>("PrincipalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("principal_id");
+
+                    b.Property<string>("ResourcePath")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("resource_path");
+
+                    b.HasKey("BindingId")
+                        .HasName("pk_principal_permission_bindings");
+
+                    b.HasIndex("PermissionId")
+                        .HasDatabaseName("ix_principal_permission_bindings_permission_id");
+
+                    b.HasIndex("PrincipalId");
+
+                    b.HasIndex("PrincipalId", "PermissionId", "ResourcePath")
+                        .IsUnique();
+
+                    b.ToTable("principal_permission_bindings");
                 });
 
             modelBuilder.Entity("Maliev.IAMService.Data.Entities.PrincipalRoleBinding", b =>
@@ -375,6 +419,27 @@ namespace Maliev.IAMService.Data.Migrations
                     b.ToTable("service_account_api_keys");
                 });
 
+            modelBuilder.Entity("Maliev.IAMService.Data.Entities.PrincipalPermissionBinding", b =>
+                {
+                    b.HasOne("Maliev.IAMService.Data.Entities.Permission", "Permission")
+                        .WithMany("PrincipalBindings")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_principal_permission_bindings_permissions_permission_id");
+
+                    b.HasOne("Maliev.IAMService.Data.Entities.Principal", "Principal")
+                        .WithMany("PermissionBindings")
+                        .HasForeignKey("PrincipalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_principal_permission_bindings_principals_principal_id");
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Principal");
+                });
+
             modelBuilder.Entity("Maliev.IAMService.Data.Entities.PrincipalRoleBinding", b =>
                 {
                     b.HasOne("Maliev.IAMService.Data.Entities.Principal", "Principal")
@@ -431,11 +496,15 @@ namespace Maliev.IAMService.Data.Migrations
 
             modelBuilder.Entity("Maliev.IAMService.Data.Entities.Permission", b =>
                 {
+                    b.Navigation("PrincipalBindings");
+
                     b.Navigation("RolePermissions");
                 });
 
             modelBuilder.Entity("Maliev.IAMService.Data.Entities.Principal", b =>
                 {
+                    b.Navigation("PermissionBindings");
+
                     b.Navigation("RoleBindings");
                 });
 

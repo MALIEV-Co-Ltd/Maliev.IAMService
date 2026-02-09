@@ -22,7 +22,7 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
     /// <summary>
     /// Creates an authenticated HTTP client with all IAM permissions for testing.
     /// </summary>
-    public HttpClient CreateAuthenticatedClientWithAllPermissions(string userId = "test-admin")
+    public HttpClient CreateAuthenticatedClientWithAllPermissions(string userId = "00000000-0000-0000-0000-000000000002")
     {
         var allPermissions = new[]
         {

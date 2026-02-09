@@ -49,4 +49,9 @@ public class Permission
     /// Gets or sets the collection of role-permission assignments that include this permission.
     /// </summary>
     public virtual ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+
+    /// <summary>
+    /// Gets or sets the collection of direct principal bindings assigned to this permission.
+    /// </summary>
+    public virtual ICollection<PrincipalPermissionBinding> PrincipalBindings { get; set; } = new List<PrincipalPermissionBinding>();
 }

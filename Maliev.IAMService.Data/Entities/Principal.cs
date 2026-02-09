@@ -62,4 +62,9 @@ public class Principal
     /// Gets or sets the collection of role bindings assigned to this principal.
     /// </summary>
     public virtual ICollection<PrincipalRoleBinding> RoleBindings { get; set; } = new List<PrincipalRoleBinding>();
+
+    /// <summary>
+    /// Gets or sets the collection of direct permission bindings assigned to this principal.
+    /// </summary>
+    public virtual ICollection<PrincipalPermissionBinding> PermissionBindings { get; set; } = new List<PrincipalPermissionBinding>();
 }

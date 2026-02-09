@@ -1,5 +1,6 @@
 using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
+using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Entities;
 using Maliev.IAMService.Data.Repositories;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
@@ -183,6 +184,55 @@ public class PrincipalService : IPrincipalService
             // For service accounts, the email follows name@serviceaccount.maliev.local convention
             var serviceEmail = $"{principalId.ToLowerInvariant()}@serviceaccount.maliev.local";
             principal = await _principalRepository.GetByEmailAsync(serviceEmail, cancellationToken);
+        }
+
+        if (principal == null && principalId.StartsWith("system:service:", StringComparison.OrdinalIgnoreCase))
+        {
+            // T-IMPROVE: Auto-register system services to prevent bootstrapping deadlocks
+            _logger.LogInformation("Auto-registering system service principal: {PrincipalId}", principalId);
+            principal = new Principal
+            {
+                PrincipalId = Guid.NewGuid(),
+                PrincipalType = "system",
+                Email = $"{principalId.ToLowerInvariant()}@serviceaccount.maliev.local",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _principalRepository.CreateAsync(principal, cancellationToken);
+        }
+
+        // T-BOOTSTRAP: Ensure system principals have the platform owner role for full access
+        if (principal != null && principal.PrincipalType == "system")
+        {
+            const string ownerRoleId = "roles.platform.owner";
+            var bindings = await _bindingRepository.GetByPrincipalAsync(principal.PrincipalId, cancellationToken);
+
+            if (!bindings.Any(b => b.RoleId == ownerRoleId))
+            {
+                _logger.LogInformation("Repairing system principal {PrincipalId}: Granting missing {RoleId}", principalId, ownerRoleId);
+
+                var ownerRole = await _roleRepository.GetByIdAsync(ownerRoleId, cancellationToken);
+                if (ownerRole != null)
+                {
+                    await _bindingRepository.CreateAsync(new PrincipalRoleBinding
+                    {
+                        BindingId = Guid.NewGuid(),
+                        PrincipalId = principal.PrincipalId,
+                        RoleId = ownerRoleId,
+                        ResourcePath = "*",
+                        GrantedAt = DateTime.UtcNow,
+                        GrantedBy = IAMDbContext.SystemPrincipalId
+                    }, cancellationToken);
+                    _logger.LogInformation("Successfully repaired system principal {PrincipalId}", principalId);
+
+                    // Invalidate cache since permissions changed
+                    await _cacheService.RemoveAsync($"iam:principal:{principal.PrincipalId}:permissions", cancellationToken);
+                }
+                else
+                {
+                    _logger.LogWarning("Could not repair system principal {PrincipalId} because {RoleId} does not exist", principalId, ownerRoleId);
+                }
+            }
         }
 
         if (principal == null)
@@ -434,7 +484,16 @@ public class PrincipalService : IPrincipalService
             throw new InvalidOperationException($"Principal {principalId} not found");
 
         // T153: Try to get from cache first
-        var cacheKey = $"iam:effective_permissions:{principalId}:{resourcePath?.Replace("/", ":") ?? "all"}";
+        // Use the same cache key format as PermissionResolver for consistency
+        var cacheKey = $"iam:principal:{principalId}:permissions";
+        if (!string.IsNullOrEmpty(resourcePath))
+        {
+            // Use SHA256 hash for resource path to ensure consistent key length in Redis
+            var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(resourcePath.ToLowerInvariant()));
+            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            cacheKey += $":path:{hash}";
+        }
+
         var cached = await _cacheService.GetAsync<EffectivePermissionsResponse>(cacheKey, cancellationToken);
         if (cached != null)
         {
@@ -451,8 +510,8 @@ public class PrincipalService : IPrincipalService
         // Apply resource path filtering
         activeBindings = activeBindings.Where(b =>
         {
-            // Global bindings (no resource scope) always apply
-            if (string.IsNullOrEmpty(b.ResourcePath))
+            // Global bindings (no resource scope or "*" wildcard) always apply
+            if (string.IsNullOrEmpty(b.ResourcePath) || b.ResourcePath == "*")
                 return true;
 
             // T203: Exclude scoped bindings if no resource path was requested (global query)
@@ -564,13 +623,17 @@ public class PrincipalService : IPrincipalService
     /// <returns>True if the binding matches the request</returns>
     private bool MatchesResourcePath(string? bindingPath, string? requestPath)
     {
-        // If no resource path requested, only global bindings match (which have null bindingPath)
+        // If no resource path requested, only global bindings match (which have null bindingPath or "*")
         if (string.IsNullOrEmpty(requestPath))
-            return string.IsNullOrEmpty(bindingPath);
+            return string.IsNullOrEmpty(bindingPath) || bindingPath == "*";
 
         // If binding has no path, it doesn't match resource-scoped requests
         if (string.IsNullOrEmpty(bindingPath))
             return false;
+
+        // Global wildcard: "*" matches everything
+        if (bindingPath == "*")
+            return true;
 
         // T204: Hierarchical match (Inheritance)
         // A binding on "orgs/1" matches "orgs/1", "orgs/1/projects/2", etc.

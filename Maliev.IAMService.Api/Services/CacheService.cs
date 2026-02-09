@@ -144,11 +144,15 @@ public class CacheService : ICacheService
             var db = _redis.GetDatabase();
             var tasks = new List<Task>();
 
+            // IDistributedCache with Redis prepends an instance name. In IAM Service, this is "iam:".
+            // We must account for this when calling Redis directly via IConnectionMultiplexer.
+            var redisPattern = "iam:" + prefix + "*";
+
             foreach (var endpoint in endpoints)
             {
                 var server = _redis.GetServer(endpoint);
                 // Note: server.Keys uses SCAN if the server supports it (Redis 2.8+), avoiding blocking the server
-                var keys = server.Keys(pattern: prefix + "*").ToArray();
+                var keys = server.Keys(pattern: redisPattern).ToArray();
                 if (keys.Length > 0)
                 {
                     tasks.Add(db.KeyDeleteAsync(keys));
@@ -158,7 +162,7 @@ public class CacheService : ICacheService
             if (tasks.Count > 0)
             {
                 await Task.WhenAll(tasks);
-                _logger.LogInformation("Successfully invalidated {Count} cache keys with prefix: {Prefix}", tasks.Count, prefix);
+                _logger.LogInformation("Successfully invalidated {Count} cache keys with prefix pattern: {Prefix}", tasks.Count, redisPattern);
             }
         }
         catch (Exception ex)

@@ -92,4 +92,8 @@ public class RoleRepository : IRoleRepository
 
         return rolePermissions.Select(rp => rp.Permission);
     }
+
+    /// <inheritdoc/>
+    public Role? GetTracked(string roleId) =>
+        _context.Roles.Local.FirstOrDefault(r => r.RoleId == roleId);
 }
