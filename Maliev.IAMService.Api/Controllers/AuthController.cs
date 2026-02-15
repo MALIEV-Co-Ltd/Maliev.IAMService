@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Maliev.Aspire.ServiceDefaults;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
 using Maliev.IAMService.Api.Models.Requests;
@@ -164,7 +165,7 @@ public class AuthController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>JWT access token, refresh token, and expiration details.</returns>
     [HttpPost("token")]
-    [EnableRateLimiting("token_limit")]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     [RequirePermission(IAMPermissions.AuthIssueToken)]
     public async Task<IActionResult> IssueToken([FromBody] IssueTokenRequest request, CancellationToken cancellationToken)
     {
@@ -188,7 +189,7 @@ public class AuthController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>New JWT access token, new refresh token, and expiration details.</returns>
     [HttpPost("token/refresh")]
-    [EnableRateLimiting("token_limit")]
+    [EnableRateLimiting(RateLimitPolicies.Auth)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
         try

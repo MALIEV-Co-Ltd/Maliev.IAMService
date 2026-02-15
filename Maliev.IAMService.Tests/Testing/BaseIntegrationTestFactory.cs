@@ -55,6 +55,7 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
     }
 
+    [Obsolete]
     public async Task InitializeAsync()
     {
         await _initLock.WaitAsync();
@@ -62,13 +63,16 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         {
             if (!_containersStarted)
             {
-                _postgresContainer = new PostgreSqlBuilder().WithImage("postgres:18-alpine")
+                _postgresContainer = new PostgreSqlBuilder()
+                    .WithImage("postgres:18-alpine")
                     .Build();
 
-                _redisContainer = new RedisBuilder().WithImage("redis:8.4-alpine")
+                _redisContainer = new RedisBuilder()
+                    .WithImage("redis:7.4-alpine")
                     .Build();
 
-                _rabbitmqContainer = new RabbitMqBuilder().WithImage("rabbitmq:4.2-alpine")
+                _rabbitmqContainer = new RabbitMqBuilder()
+                    .WithImage("rabbitmq:4.0-alpine")
                     .Build();
 
                 // Start all containers in parallel
@@ -126,6 +130,9 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         Environment.SetEnvironmentVariable($"ConnectionStrings__{DbConnectionStringName}", _postgresContainer!.GetConnectionString());
         Environment.SetEnvironmentVariable("ConnectionStrings__redis", _redisContainer!.GetConnectionString());
         Environment.SetEnvironmentVariable("ConnectionStrings__rabbitmq", _rabbitmqContainer!.GetConnectionString());
+        Environment.SetEnvironmentVariable("CORS_ALLOWED_ORIGINS", "http://localhost:3000");
+        Environment.SetEnvironmentVariable("CORS__AllowedOrigins__0", "http://localhost:3000");
+        Environment.SetEnvironmentVariable("IAM__RegistrationDelaySeconds", "0");
     }
 
     public new async Task DisposeAsync()
@@ -153,9 +160,12 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         // Static containers are NOT disposed here to allow reuse across tests
         _testRsa.Dispose();
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", null); // Cleanup
+        Environment.SetEnvironmentVariable("CORS_ALLOWED_ORIGINS", null);
+        Environment.SetEnvironmentVariable("CORS__AllowedOrigins__0", null);
+        Environment.SetEnvironmentVariable("IAM__RegistrationDelaySeconds", null);
     }
 
-
+    [Obsolete]
     protected override IHost CreateHost(IHostBuilder builder)
     {
         // Ensure containers are started before creating host
@@ -169,6 +179,10 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         Environment.SetEnvironmentVariable("JWT_PUBLIC_KEY_MODULUS", Convert.ToBase64String(rsaParams.Modulus!));
         Environment.SetEnvironmentVariable("JWT_PUBLIC_KEY_EXPONENT", Convert.ToBase64String(rsaParams.Exponent!));
 
+        // Also set the format expected by some Aspire helpers (raw base64 of public key info)
+        var keyBytes = _testRsa.ExportSubjectPublicKeyInfo();
+        Environment.SetEnvironmentVariable("Authentication__Jwt__PublicKey", Convert.ToBase64String(keyBytes));
+
         // Allow derived classes to set additional environment variables
         ConfigureEnvironmentVariables();
 
@@ -180,8 +194,7 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         builder.ConfigureLogging(logging =>
         {
             logging.ClearProviders();
-            // Optional: add a simple console logger for debugging tests if needed
-            // logging.AddConsole();
+            logging.AddConsole();
         });
 
         builder.ConfigureAppConfiguration((context, config) =>
@@ -191,15 +204,36 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
                 ["Jwt:SecurityKey"] = "test-secret-key-at-least-32-characters-long",
                 [$"ConnectionStrings:{DbConnectionStringName}"] = _postgresContainer!.GetConnectionString(),
                 ["ConnectionStrings:redis"] = _redisContainer!.GetConnectionString(),
-                ["ConnectionStrings:rabbitmq"] = _rabbitmqContainer!.GetConnectionString()
+                ["ConnectionStrings:rabbitmq"] = _rabbitmqContainer!.GetConnectionString(),
+                ["CORS:AllowedOrigins:0"] = "http://localhost:3000",
+                ["CORS_ALLOWED_ORIGINS"] = "http://localhost:3000",
+                ["IAM:RegistrationDelaySeconds"] = "0",
+                ["RateLimiting:PermitLimit"] = "10000",
+                ["RateLimiting:auth:PermitLimit"] = "10000"
             });
         });
 
         builder.ConfigureTestServices(services =>
         {
+            // Manual Redis registration for tests because AddStandardCache skips it in 'Testing' env
+            var redisConnectionString = _redisContainer!.GetConnectionString();
+            services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(sp =>
+            {
+                return StackExchange.Redis.ConnectionMultiplexer.Connect(redisConnectionString);
+            });
+
+            // Mock IAM registration status tracker from ServiceDefaults if it exists
+            // (Used by health checks in Program.cs via AddIAMRegistration)
+            var statusTracker = new Maliev.Aspire.ServiceDefaults.IAM.IAMRegistrationStatusTracker();
+            statusTracker.MarkRegistered();
+            services.AddSingleton(statusTracker);
+
             // Configure JWT Bearer authentication with test RSA key
             services.PostConfigureAll<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(options =>
             {
+                // Disable claim type mapping to keep original claim names like "sub" instead of URIs
+                options.MapInboundClaims = false;
+
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -213,10 +247,29 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
                     NameClaimType = "sub",
                     RoleClaimType = "role"
                 };
+
+                // Clear SignatureValidator to ensure proper JWT validation and claim mapping
+                options.TokenValidationParameters.SignatureValidator = null;
             });
 
             // Add MassTransit test harness for testing message publishing/consuming
             services.AddMassTransitTestHarness();
+
+            // Disable background services that cause interference during tests
+            var backgroundServicesToDisable = new[]
+            {
+                "IAMInitializationHostedService",
+                "BackgroundIAMRegistrationService"
+            };
+
+            var descriptors = services.Where(d =>
+                d.ServiceType == typeof(IHostedService) &&
+                backgroundServicesToDisable.Contains(d.ImplementationType?.Name)).ToList();
+
+            foreach (var descriptor in descriptors)
+            {
+                services.Remove(descriptor);
+            }
 
             // Allow derived classes to add additional test services
             ConfigureAdditionalServices(services);
