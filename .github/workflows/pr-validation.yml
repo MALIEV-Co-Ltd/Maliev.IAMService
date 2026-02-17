@@ -13,16 +13,18 @@ jobs:
     outputs:
       version_format: ${{ steps.set-version.outputs.version_format }}
     steps:
-      - name: Set SharedLibraryVersion format
-        id: set-version
+      - id: set-version
         run: |
           BASE_BRANCH="${{ github.base_ref }}"
-          if [ "$BASE_BRANCH" == "main" ]; then
+          if ["$BASE_BRANCH" == "main"]; then
             VERSION_FORMAT="1.0.*"
+          elif ["$BASE_BRANCH" == "staging"]; then
+            VERSION_FORMAT="1.0.*-beta*"
           else
-            VERSION_FORMAT="1.0.*-*"
+            VERSION_FORMAT="1.0.*-alpha*"
           fi
           echo "version_format=$VERSION_FORMAT" >> $GITHUB_OUTPUT
+
 
   build-and-test:
     needs: prep
