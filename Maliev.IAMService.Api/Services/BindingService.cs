@@ -135,26 +135,33 @@ public class BindingService : IBindingService
         }, cancellationToken);
 
         // T068: Publish event
-        var principalRoleGrantedEvent = new PrincipalRoleGrantedEvent(
-            MessageId: Guid.NewGuid(),
-            MessageName: nameof(PrincipalRoleGrantedEvent),
-            MessageType: MessageType.Event,
-            MessageVersion: "1.0.0",
-            PublishedBy: "iam",
-            ConsumedBy: [],
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            IsPublic: false,
-            BindingId: created.BindingId,
-            PrincipalId: created.PrincipalId,
-            RoleId: created.RoleId,
-            ResourceType: string.Empty, // Empty for backward compatibility
-            ResourceId: created.ResourcePath ?? string.Empty, // Using ResourcePath as ResourceId for now
-            GrantedAt: new DateTimeOffset(created.GrantedAt, TimeSpan.Zero),
-            ExpiresAt: created.ExpiresAt.HasValue ? new DateTimeOffset(created.ExpiresAt.Value, TimeSpan.Zero) : DateTimeOffset.MaxValue
-        );
-        await _publishEndpoint.Publish(principalRoleGrantedEvent, cancellationToken);
+        try
+        {
+            var principalRoleGrantedEvent = new PrincipalRoleGrantedEvent(
+                MessageId: Guid.NewGuid(),
+                MessageName: nameof(PrincipalRoleGrantedEvent),
+                MessageType: MessageType.Event,
+                MessageVersion: "1.0.0",
+                PublishedBy: "iam",
+                ConsumedBy: [],
+                CorrelationId: Guid.NewGuid(),
+                CausationId: null,
+                OccurredAtUtc: DateTimeOffset.UtcNow,
+                IsPublic: false,
+                BindingId: created.BindingId,
+                PrincipalId: created.PrincipalId,
+                RoleId: created.RoleId,
+                ResourceType: string.Empty, // Empty for backward compatibility
+                ResourceId: created.ResourcePath ?? string.Empty, // Using ResourcePath as ResourceId for now
+                GrantedAt: new DateTimeOffset(created.GrantedAt, TimeSpan.Zero),
+                ExpiresAt: created.ExpiresAt.HasValue ? new DateTimeOffset(created.ExpiresAt.Value, TimeSpan.Zero) : DateTimeOffset.MaxValue
+            );
+            await _publishEndpoint.Publish(principalRoleGrantedEvent, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to publish PrincipalRoleGrantedEvent for principal {PrincipalId}. This may happen during bootstrap if messaging is not ready.", principalId);
+        }
 
         _logger.LogInformation("Granted role {RoleId} to principal {PrincipalId}", request.RoleId, principalId);
 
@@ -185,23 +192,30 @@ public class BindingService : IBindingService
         }, cancellationToken);
 
         // T069: Publish event
-        var principalRoleRevokedEvent = new PrincipalRoleRevokedEvent(
-            MessageId: Guid.NewGuid(),
-            MessageName: nameof(PrincipalRoleRevokedEvent),
-            MessageType: MessageType.Event,
-            MessageVersion: "1.0.0",
-            PublishedBy: "iam",
-            ConsumedBy: [],
-            CorrelationId: Guid.NewGuid(),
-            CausationId: null,
-            OccurredAtUtc: DateTimeOffset.UtcNow,
-            IsPublic: false,
-            BindingId: bindingId,
-            PrincipalId: principalId,
-            RoleId: binding.RoleId,
-            RevokedAt: DateTimeOffset.UtcNow
-        );
-        await _publishEndpoint.Publish(principalRoleRevokedEvent, cancellationToken);
+        try
+        {
+            var principalRoleRevokedEvent = new PrincipalRoleRevokedEvent(
+                MessageId: Guid.NewGuid(),
+                MessageName: nameof(PrincipalRoleRevokedEvent),
+                MessageType: MessageType.Event,
+                MessageVersion: "1.0.0",
+                PublishedBy: "iam",
+                ConsumedBy: [],
+                CorrelationId: Guid.NewGuid(),
+                CausationId: null,
+                OccurredAtUtc: DateTimeOffset.UtcNow,
+                IsPublic: false,
+                BindingId: bindingId,
+                PrincipalId: principalId,
+                RoleId: binding.RoleId,
+                RevokedAt: DateTimeOffset.UtcNow
+            );
+            await _publishEndpoint.Publish(principalRoleRevokedEvent, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to publish PrincipalRoleRevokedEvent for principal {PrincipalId}", principalId);
+        }
 
         _logger.LogInformation("Revoked role {RoleId} from principal {PrincipalId}", binding.RoleId, principalId);
     }

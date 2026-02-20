@@ -146,69 +146,84 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
     private async Task UpdateAdminRoleWithNewPermissionsAsync(List<string> newPermissionIds, CancellationToken cancellationToken)
     {
         const string ownerRoleId = "roles.platform.owner";
-
         try
         {
-            _logger.LogInformation("Attempting to update {RoleId} with {Count} newly registered permissions", ownerRoleId, newPermissionIds.Count);
+            _logger.LogInformation("Ensuring {RoleId} exists and has {Count} newly registered permissions", ownerRoleId, newPermissionIds.Count);
 
-            // Check if owner role exists
+            // 1. Ensure wildcard permission exists
+            var wildcardPermission = await _permissionRepository.GetByIdAsync("*", cancellationToken);
+            if (wildcardPermission == null)
+            {
+                wildcardPermission = new Permission
+                {
+                    PermissionId = "*",
+                    ServiceName = "platform",
+                    ResourceType = "all",
+                    Action = "all",
+                    Description = "Wildcard permission for full access"
+                };
+                await _permissionRepository.CreateAsync(wildcardPermission, cancellationToken);
+            }
+
+            // 2. Ensure owner role exists
             var ownerRole = await _roleRepository.GetByIdAsync(ownerRoleId, cancellationToken);
             if (ownerRole == null)
             {
-                _logger.LogWarning("Owner role {RoleId} does not exist yet, skipping permission sync", ownerRoleId);
-                return;
+                ownerRole = new Role
+                {
+                    RoleId = ownerRoleId,
+                    RoleName = "Platform Owner",
+                    ServiceName = "platform",
+                    Description = "Full administrative access",
+                    IsCustom = false
+                };
+                await _roleRepository.CreateAsync(ownerRole, cancellationToken);
             }
 
-            _logger.LogInformation("Owner role {RoleId} found with {ExistingCount} existing permissions", ownerRoleId, ownerRole.RolePermissions.Count);
-
-            // Get the actual permission entities
-            var allPermissions = await _permissionRepository.GetAllAsync(cancellationToken);
-            var newPermissions = allPermissions.Where(p => newPermissionIds.Contains(p.PermissionId)).ToList();
-
-            _logger.LogInformation("Found {NewPermissionsCount} new permissions in database out of {RequestedCount} requested",
-                newPermissions.Count, newPermissionIds.Count);
-
-            if (!newPermissions.Any())
-            {
-                _logger.LogWarning("No new permissions found to add to {RoleId}", ownerRoleId);
-                return;
-            }
-
-            // Get existing permission IDs in the role
-            var existingPermissionIds = ownerRole.RolePermissions.Select(rp => rp.PermissionId).ToHashSet();
-
-            // Add only permissions that don't already exist
-            var permissionsToAdd = newPermissions.Where(p => !existingPermissionIds.Contains(p.PermissionId)).ToList();
-
-            _logger.LogInformation("Permissions to add: {Count}. New: [{NewPerms}], Already exist: {ExistingCount}",
-                permissionsToAdd.Count,
-                string.Join(", ", permissionsToAdd.Select(p => p.PermissionId)),
-                newPermissions.Count - permissionsToAdd.Count);
-
-            if (!permissionsToAdd.Any())
-            {
-                _logger.LogInformation("All {Count} new permissions already exist in {RoleId}", newPermissions.Count, ownerRoleId);
-                return;
-            }
-
-            // Add new permissions to the role
-            foreach (var permission in permissionsToAdd)
+            // 3. Ensure wildcard permission is assigned to owner role
+            if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == "*"))
             {
                 ownerRole.RolePermissions.Add(new RolePermission
                 {
                     RoleId = ownerRoleId,
-                    PermissionId = permission.PermissionId
+                    PermissionId = "*"
                 });
+                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
             }
 
-            ownerRole.UpdatedAt = DateTime.UtcNow;
-            await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
+            // 4. Fetch the newly registered permissions from DB
+            var allPermissions = await _permissionRepository.GetAllAsync(cancellationToken);
+            var newPermissions = allPermissions.Where(p => newPermissionIds.Contains(p.PermissionId)).ToList();
 
-            _logger.LogInformation(
-                "Updated {RoleId} with {Count} new permissions: {Permissions}",
-                ownerRoleId, permissionsToAdd.Count, string.Join(", ", permissionsToAdd.Select(p => p.PermissionId)));
+            if (!newPermissions.Any())
+            {
+                _logger.LogWarning("No new permissions found in database for IDs: [{Ids}]", string.Join(", ", newPermissionIds));
+                return;
+            }
 
-            // Invalidate permission cache for all users with this role
+            // 5. Add each new permission to owner role (if not already assigned)
+            var addedCount = 0;
+            foreach (var permission in newPermissions)
+            {
+                if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == permission.PermissionId))
+                {
+                    ownerRole.RolePermissions.Add(new RolePermission
+                    {
+                        RoleId = ownerRoleId,
+                        PermissionId = permission.PermissionId
+                    });
+                    addedCount++;
+                }
+            }
+
+            if (addedCount > 0)
+            {
+                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
+                _logger.LogInformation("Updated {RoleId} with {Count} permissions: {Permissions}",
+                    ownerRoleId, addedCount, string.Join(", ", newPermissions.Select(p => p.PermissionId)));
+            }
+
+            // 6. Invalidate permission cache for all users with this role
             await InvalidatePermissionCacheForRoleAsync(ownerRoleId, cancellationToken);
         }
         catch (Exception ex)

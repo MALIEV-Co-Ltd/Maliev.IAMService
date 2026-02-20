@@ -1,5 +1,6 @@
 using Maliev.IAMService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Maliev.IAMService.Data.Repositories;
 
@@ -36,15 +37,47 @@ public class PermissionRepository : IPermissionRepository
     public async Task<Permission> CreateAsync(Permission permission, CancellationToken cancellationToken = default)
     {
         _context.Permissions.Add(permission);
-        await _context.SaveChangesAsync(cancellationToken);
-        return permission;
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return permission;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            _context.Entry(permission).State = EntityState.Detached;
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task CreateManyAsync(IEnumerable<Permission> permissions, CancellationToken cancellationToken = default)
     {
-        _context.Permissions.AddRange(permissions);
-        await _context.SaveChangesAsync(cancellationToken);
+        var permissionList = permissions.ToList();
+        if (!permissionList.Any()) return;
+
+        _context.Permissions.AddRange(permissionList);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            foreach (var p in permissionList)
+                _context.Entry(p).State = EntityState.Detached;
+
+            foreach (var permission in permissionList)
+            {
+                _context.Permissions.Add(permission);
+                try
+                {
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException innerEx) when (innerEx.InnerException is PostgresException innerPgEx && innerPgEx.SqlState == "23505")
+                {
+                    _context.Entry(permission).State = EntityState.Detached;
+                }
+            }
+        }
     }
 
     /// <inheritdoc/>

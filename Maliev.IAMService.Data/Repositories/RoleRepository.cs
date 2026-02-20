@@ -1,5 +1,6 @@
 using Maliev.IAMService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Maliev.IAMService.Data.Repositories;
 
@@ -48,15 +49,47 @@ public class RoleRepository : IRoleRepository
     public async Task<Role> CreateAsync(Role role, CancellationToken cancellationToken = default)
     {
         _context.Roles.Add(role);
-        await _context.SaveChangesAsync(cancellationToken);
-        return role;
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return role;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            _context.Entry(role).State = EntityState.Detached;
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     public async Task CreateManyAsync(IEnumerable<Role> roles, CancellationToken cancellationToken = default)
     {
-        await _context.Roles.AddRangeAsync(roles, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        var roleList = roles.ToList();
+        if (!roleList.Any()) return;
+
+        await _context.Roles.AddRangeAsync(roleList, cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            foreach (var r in roleList)
+                _context.Entry(r).State = EntityState.Detached;
+
+            foreach (var role in roleList)
+            {
+                await _context.Roles.AddAsync(role, cancellationToken);
+                try
+                {
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException innerEx) when (innerEx.InnerException is PostgresException innerPgEx && innerPgEx.SqlState == "23505")
+                {
+                    _context.Entry(role).State = EntityState.Detached;
+                }
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -64,7 +97,15 @@ public class RoleRepository : IRoleRepository
     {
         role.UpdatedAt = DateTime.UtcNow;
         _context.Roles.Update(role);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            _context.Entry(role).State = EntityState.Detached;
+            throw;
+        }
     }
 
     /// <inheritdoc/>
