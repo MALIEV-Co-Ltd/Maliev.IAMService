@@ -45,7 +45,8 @@ public class PermissionRepository : IPermissionRepository
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
         {
             _context.Entry(permission).State = EntityState.Detached;
-            throw;
+            return await _context.Permissions.FindAsync(new object[] { permission.PermissionId }, cancellationToken)
+                ?? permission;
         }
     }
 
