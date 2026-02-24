@@ -425,4 +425,146 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         Assert.Single(serviceAPermissions);
         Assert.Single(serviceBPermissions);
     }
+
+    [Fact]
+    public async Task ConsumeMessage_ConcurrentRegistration_NoDuplicateKeyErrors()
+    {
+        await CleanDatabaseAsync();
+
+        var harness = Factory.Services.GetRequiredService<ITestHarness>();
+        var serviceName = "concurrent-test";
+
+        var message = new PermissionRegistrationRequest
+        {
+            MessageId = Guid.NewGuid(),
+            MessageName = nameof(PermissionRegistrationRequest),
+            MessageType = MessageType.Request,
+            MessageVersion = "1.0.0",
+            PublishedBy = "test",
+            ConsumedBy = new List<string> { "iam" },
+            CorrelationId = Guid.NewGuid(),
+            ServiceName = serviceName,
+            Permissions = new List<PermissionRegistrationRequestPermissionsItem>
+            {
+                new() { PermissionId = $"{serviceName}.data.read", Description = "Read data" },
+                new() { PermissionId = $"{serviceName}.data.write", Description = "Write data" }
+            },
+            Roles = new List<PermissionRegistrationRequestRolesItem>()
+        };
+
+        // Act - Publish same message concurrently (simulating race condition)
+        var task1 = harness.Bus.Publish(message);
+        var task2 = harness.Bus.Publish(message);
+        var task3 = harness.Bus.Publish(message);
+        await Task.WhenAll(task1, task2, task3);
+        await Task.Delay(3000); // Wait for all consumers to process
+
+        // Assert - No duplicate key errors, role should have exactly one instance of each permission
+        using var scope = Factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
+
+        var ownerRole = await dbContext.Roles
+            .Include(r => r.RolePermissions)
+            .FirstOrDefaultAsync(r => r.RoleId == "roles.platform.owner");
+
+        Assert.NotNull(ownerRole);
+
+        // Verify permissions exist exactly once
+        var readPermCount = ownerRole.RolePermissions.Count(rp => rp.PermissionId == $"{serviceName}.data.read");
+        var writePermCount = ownerRole.RolePermissions.Count(rp => rp.PermissionId == $"{serviceName}.data.write");
+        Assert.Equal(1, readPermCount);
+        Assert.Equal(1, writePermCount);
+
+        // Verify permissions were registered
+        var registeredPermissions = await dbContext.Permissions
+            .Where(p => p.PermissionId.StartsWith(serviceName))
+            .ToListAsync();
+        Assert.Equal(2, registeredPermissions.Count);
+    }
+
+    [Fact]
+    public async Task ConsumeMessage_UpdatesPlatformOwnerRole_WithNewPermissions()
+    {
+        await CleanDatabaseAsync();
+
+        var harness = Factory.Services.GetRequiredService<ITestHarness>();
+        var serviceName = "owner-role-test";
+
+        var message = new PermissionRegistrationRequest
+        {
+            MessageId = Guid.NewGuid(),
+            MessageName = nameof(PermissionRegistrationRequest),
+            MessageType = MessageType.Request,
+            MessageVersion = "1.0.0",
+            PublishedBy = "test",
+            ConsumedBy = new List<string> { "iam" },
+            CorrelationId = Guid.NewGuid(),
+            ServiceName = serviceName,
+            Permissions = new List<PermissionRegistrationRequestPermissionsItem>
+            {
+                new() { PermissionId = $"{serviceName}.special.action", Description = "Special action" }
+            },
+            Roles = new List<PermissionRegistrationRequestRolesItem>()
+        };
+
+        // Act
+        await harness.Bus.Publish(message);
+        await Task.Delay(1500);
+
+        // Assert - Platform owner role should have the new permission
+        using var scope = Factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
+
+        var ownerRole = await dbContext.Roles
+            .Include(r => r.RolePermissions)
+            .FirstOrDefaultAsync(r => r.RoleId == "roles.platform.owner");
+
+        Assert.NotNull(ownerRole);
+        Assert.Contains(ownerRole.RolePermissions, rp => rp.PermissionId == $"{serviceName}.special.action");
+    }
+
+    [Fact]
+    public async Task ConsumeMessage_ExistingPermissionOnOwnerRole_NotDuplicated()
+    {
+        await CleanDatabaseAsync();
+
+        var harness = Factory.Services.GetRequiredService<ITestHarness>();
+        var serviceName = "no-duplicate-test";
+
+        var message = new PermissionRegistrationRequest
+        {
+            MessageId = Guid.NewGuid(),
+            MessageName = nameof(PermissionRegistrationRequest),
+            MessageType = MessageType.Request,
+            MessageVersion = "1.0.0",
+            PublishedBy = "test",
+            ConsumedBy = new List<string> { "iam" },
+            CorrelationId = Guid.NewGuid(),
+            ServiceName = serviceName,
+            Permissions = new List<PermissionRegistrationRequestPermissionsItem>
+            {
+                new() { PermissionId = $"{serviceName}.unique.action", Description = "Unique action" }
+            },
+            Roles = new List<PermissionRegistrationRequestRolesItem>()
+        };
+
+        // Act - Publish same message twice sequentially
+        await harness.Bus.Publish(message);
+        await Task.Delay(1000);
+        await harness.Bus.Publish(message);
+        await Task.Delay(1000);
+
+        // Assert - Owner role should have exactly one instance of the permission
+        using var scope = Factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
+
+        var ownerRole = await dbContext.Roles
+            .Include(r => r.RolePermissions)
+            .FirstOrDefaultAsync(r => r.RoleId == "roles.platform.owner");
+
+        Assert.NotNull(ownerRole);
+
+        var permCount = ownerRole.RolePermissions.Count(rp => rp.PermissionId == $"{serviceName}.unique.action");
+        Assert.Equal(1, permCount);
+    }
 }

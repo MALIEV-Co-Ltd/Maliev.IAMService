@@ -1,8 +1,11 @@
 using Maliev.Aspire.ServiceDefaults;
+using Maliev.IAMService.Api.Consumers;
+using Maliev.IAMService.Api.Events;
 using Maliev.IAMService.Api.Health;
 using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 // Initialize bootstrap logging
@@ -64,11 +67,11 @@ try
     builder.AddMassTransitWithRabbitMq(x =>
     {
         // Register event consumers
-        x.AddConsumer<Maliev.IAMService.Api.Events.PrincipalRoleGrantedEventConsumer>();
-        x.AddConsumer<Maliev.IAMService.Api.Events.PrincipalRoleRevokedEventConsumer>();
-        x.AddConsumer<Maliev.IAMService.Api.Events.RoleUpdatedEventConsumer>();
-        x.AddConsumer<Maliev.IAMService.Api.Consumers.PermissionRegistrationRequestConsumer>();
-        x.AddConsumer<Maliev.IAMService.Api.Consumers.EmployeeCreatedConsumer>();
+        x.AddConsumer<PrincipalRoleGrantedEventConsumer>();
+        x.AddConsumer<PrincipalRoleRevokedEventConsumer>();
+        x.AddConsumer<RoleUpdatedEventConsumer>();
+        x.AddConsumer<PermissionRegistrationRequestConsumer, PermissionRegistrationRequestConsumerDefinition>();
+        x.AddConsumer<EmployeeCreatedConsumer>();
     });
 
     // --- API Configuration ---

@@ -180,16 +180,8 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
                 await _roleRepository.CreateAsync(ownerRole, cancellationToken);
             }
 
-            // 3. Ensure wildcard permission is assigned to owner role
-            if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == "*"))
-            {
-                ownerRole.RolePermissions.Add(new RolePermission
-                {
-                    RoleId = ownerRoleId,
-                    PermissionId = "*"
-                });
-                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
-            }
+            // 3. Ensure wildcard permission is assigned to owner role (idempotent)
+            await _roleRepository.AddPermissionToRoleAsync(ownerRoleId, "*", cancellationToken);
 
             // 4. Fetch the newly registered permissions from DB
             var allPermissions = await _permissionRepository.GetAllAsync(cancellationToken);
@@ -201,26 +193,23 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
                 return;
             }
 
-            // 5. Add each new permission to owner role (if not already assigned)
+            // 5. Add each new permission to owner role using idempotent method
             var addedCount = 0;
+            var addedPermissions = new List<string>();
             foreach (var permission in newPermissions)
             {
-                if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == permission.PermissionId))
+                var added = await _roleRepository.AddPermissionToRoleAsync(ownerRoleId, permission.PermissionId, cancellationToken);
+                if (added)
                 {
-                    ownerRole.RolePermissions.Add(new RolePermission
-                    {
-                        RoleId = ownerRoleId,
-                        PermissionId = permission.PermissionId
-                    });
                     addedCount++;
+                    addedPermissions.Add(permission.PermissionId);
                 }
             }
 
             if (addedCount > 0)
             {
-                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
                 _logger.LogInformation("Updated {RoleId} with {Count} permissions: {Permissions}",
-                    ownerRoleId, addedCount, string.Join(", ", newPermissions.Select(p => p.PermissionId)));
+                    ownerRoleId, addedCount, string.Join(", ", addedPermissions));
             }
 
             // 6. Invalidate permission cache for all users with this role

@@ -1,6 +1,5 @@
 using Maliev.IAMService.Data.Entities;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace Maliev.IAMService.Data.Repositories;
 
@@ -36,18 +35,16 @@ public class PermissionRepository : IPermissionRepository
     /// <inheritdoc/>
     public async Task<Permission> CreateAsync(Permission permission, CancellationToken cancellationToken = default)
     {
-        _context.Permissions.Add(permission);
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-            return permission;
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
-        {
-            _context.Entry(permission).State = EntityState.Detached;
-            return await _context.Permissions.FindAsync(new object[] { permission.PermissionId }, cancellationToken)
-                ?? permission;
-        }
+        await _context.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO permissions (permission_id, service_name, resource_type, action, description, registered_at)
+            VALUES ({permission.PermissionId}, {permission.ServiceName}, {permission.ResourceType}, {permission.Action}, {permission.Description}, {permission.RegisteredAt})
+            ON CONFLICT (permission_id) DO NOTHING
+            """,
+            cancellationToken);
+
+        return await _context.Permissions.FindAsync(new object[] { permission.PermissionId }, cancellationToken)
+            ?? permission;
     }
 
     /// <inheritdoc/>
@@ -56,28 +53,15 @@ public class PermissionRepository : IPermissionRepository
         var permissionList = permissions.ToList();
         if (!permissionList.Any()) return;
 
-        _context.Permissions.AddRange(permissionList);
-        try
+        foreach (var permission in permissionList)
         {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
-        {
-            foreach (var p in permissionList)
-                _context.Entry(p).State = EntityState.Detached;
-
-            foreach (var permission in permissionList)
-            {
-                _context.Permissions.Add(permission);
-                try
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
-                catch (DbUpdateException innerEx) when (innerEx.InnerException is PostgresException innerPgEx && innerPgEx.SqlState == "23505")
-                {
-                    _context.Entry(permission).State = EntityState.Detached;
-                }
-            }
+            await _context.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO permissions (permission_id, service_name, resource_type, action, description, registered_at)
+                VALUES ({permission.PermissionId}, {permission.ServiceName}, {permission.ResourceType}, {permission.Action}, {permission.Description}, {permission.RegisteredAt})
+                ON CONFLICT (permission_id) DO NOTHING
+                """,
+                cancellationToken);
         }
     }
 

@@ -104,4 +104,13 @@ public interface IRoleRepository
     /// <param name="roleId">The unique identifier of the role.</param>
     /// <returns>The tracked role if found; otherwise, null.</returns>
     Role? GetTracked(string roleId);
+
+    /// <summary>
+    /// Adds a permission to a role idempotently.
+    /// </summary>
+    /// <param name="roleId">The unique identifier of the role.</param>
+    /// <param name="permissionId">The unique identifier of the permission.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>True if the permission was added; false if it already exists on the role.</returns>
+    Task<bool> AddPermissionToRoleAsync(string roleId, string permissionId, CancellationToken cancellationToken = default);
 }

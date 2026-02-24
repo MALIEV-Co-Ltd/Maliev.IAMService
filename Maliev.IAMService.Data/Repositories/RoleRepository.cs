@@ -48,17 +48,30 @@ public class RoleRepository : IRoleRepository
     /// <inheritdoc/>
     public async Task<Role> CreateAsync(Role role, CancellationToken cancellationToken = default)
     {
-        _context.Roles.Add(role);
-        try
+        // Same rationale as CreateManyAsync: raw SQL ON CONFLICT DO NOTHING avoids the EF Core
+        // exception logging path that fires before the catch block on concurrent duplicate inserts.
+        await _context.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO roles (role_id, role_name, service_name, description, is_custom, created_by, created_at, updated_at)
+            VALUES ({role.RoleId}, {role.RoleName}, {role.ServiceName}, {role.Description}, {role.IsCustom}, {role.CreatedBy}, {role.CreatedAt}, {role.UpdatedAt})
+            ON CONFLICT (role_id) DO NOTHING
+            """,
+            cancellationToken);
+
+        foreach (var rp in role.RolePermissions)
         {
-            await _context.SaveChangesAsync(cancellationToken);
-            return role;
+            await _context.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO role_permissions (role_id, permission_id, added_at)
+                VALUES ({rp.RoleId}, {rp.PermissionId}, {rp.AddedAt})
+                ON CONFLICT (role_id, permission_id) DO NOTHING
+                """,
+                cancellationToken);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
-        {
-            _context.Entry(role).State = EntityState.Detached;
-            throw;
-        }
+
+        return await _context.Roles
+            .Include(r => r.RolePermissions)
+            .FirstAsync(r => r.RoleId == role.RoleId, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -67,27 +80,32 @@ public class RoleRepository : IRoleRepository
         var roleList = roles.ToList();
         if (!roleList.Any()) return;
 
-        await _context.Roles.AddRangeAsync(roleList, cancellationToken);
-        try
+        // Raw SQL with ON CONFLICT DO NOTHING is used here instead of EF Core Add+SaveChanges.
+        // During startup, multiple services call RegisterRoles concurrently (up to 5 at once due to the
+        // semaphore in RoleService). All concurrent requests can read an empty DB simultaneously (TOCTOU),
+        // then all attempt to insert the same roles. With EF Core, this causes DbUpdateException(23505)
+        // which EF Core logs at "fail" level internally before the catch block fires — polluting logs even
+        // though the exception was handled. ON CONFLICT DO NOTHING is atomic at the DB level and never
+        // enters the EF Core exception path, so the race is handled cleanly with no error logs.
+        foreach (var role in roleList)
         {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
-        {
-            foreach (var r in roleList)
-                _context.Entry(r).State = EntityState.Detached;
+            await _context.Database.ExecuteSqlAsync(
+                $"""
+                INSERT INTO roles (role_id, role_name, service_name, description, is_custom, created_by, created_at, updated_at)
+                VALUES ({role.RoleId}, {role.RoleName}, {role.ServiceName}, {role.Description}, {role.IsCustom}, {role.CreatedBy}, {role.CreatedAt}, {role.UpdatedAt})
+                ON CONFLICT (role_id) DO NOTHING
+                """,
+                cancellationToken);
 
-            foreach (var role in roleList)
+            foreach (var rp in role.RolePermissions)
             {
-                await _context.Roles.AddAsync(role, cancellationToken);
-                try
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
-                catch (DbUpdateException innerEx) when (innerEx.InnerException is PostgresException innerPgEx && innerPgEx.SqlState == "23505")
-                {
-                    _context.Entry(role).State = EntityState.Detached;
-                }
+                await _context.Database.ExecuteSqlAsync(
+                    $"""
+                    INSERT INTO role_permissions (role_id, permission_id, added_at)
+                    VALUES ({rp.RoleId}, {rp.PermissionId}, {rp.AddedAt})
+                    ON CONFLICT (role_id, permission_id) DO NOTHING
+                    """,
+                    cancellationToken);
             }
         }
     }
@@ -132,6 +150,19 @@ public class RoleRepository : IRoleRepository
             .ToListAsync(cancellationToken);
 
         return rolePermissions.Select(rp => rp.Permission);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> AddPermissionToRoleAsync(string roleId, string permissionId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO role_permissions (role_id, permission_id, added_at)
+            VALUES ({roleId}, {permissionId}, {DateTime.UtcNow})
+            ON CONFLICT (role_id, permission_id) DO NOTHING
+            """,
+            cancellationToken);
+        return rows > 0;
     }
 
     /// <inheritdoc/>
