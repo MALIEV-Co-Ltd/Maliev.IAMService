@@ -3,6 +3,7 @@ using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Tests.Testing;
+using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts.Generated;
 using MassTransit;
 using MassTransit.Testing;

@@ -2,6 +2,7 @@ using Maliev.IAMService.Api.Models.Requests;
 using Maliev.IAMService.Api.Models.Responses;
 using Maliev.IAMService.Data.Entities;
 using Maliev.IAMService.Data.Repositories;
+using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts.Generated;
 using MassTransit;
 

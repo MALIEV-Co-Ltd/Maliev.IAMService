@@ -3,6 +3,7 @@ using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Data.Entities;
 using Maliev.IAMService.Data.Repositories;
+using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts.Generated;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
