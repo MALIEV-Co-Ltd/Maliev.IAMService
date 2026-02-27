@@ -4,7 +4,7 @@ using Maliev.IAMService.Api.Services;
 using Maliev.IAMService.Data;
 using Maliev.IAMService.Tests.Testing;
 using Maliev.MessagingContracts.Contracts.Iam;
-using Maliev.MessagingContracts.Generated;
+using Maliev.MessagingContracts;
 using MassTransit;
 using MassTransit.Testing;
 using Microsoft.EntityFrameworkCore;

@@ -4,7 +4,7 @@ using Maliev.IAMService.Api.Validators;
 using Maliev.IAMService.Data.Entities;
 using Maliev.IAMService.Data.Repositories;
 using Maliev.MessagingContracts.Contracts.Iam;
-using Maliev.MessagingContracts.Generated;
+using Maliev.MessagingContracts;
 using MassTransit;
 using System.Collections.Concurrent;
 
