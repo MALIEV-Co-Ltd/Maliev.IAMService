@@ -2,9 +2,8 @@ using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Data.Repositories;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 

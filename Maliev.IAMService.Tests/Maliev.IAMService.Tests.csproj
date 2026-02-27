@@ -25,7 +25,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Maliev.IAMService.Api\Maliev.IAMService.Api.csproj" />
-    <ProjectReference Include="..\Maliev.IAMService.Data\Maliev.IAMService.Data.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Application\Maliev.IAMService.Application.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Domain\Maliev.IAMService.Domain.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Infrastructure\Maliev.IAMService.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

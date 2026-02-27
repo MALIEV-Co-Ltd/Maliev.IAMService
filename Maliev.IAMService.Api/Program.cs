@@ -1,8 +1,9 @@
 using Maliev.Aspire.ServiceDefaults;
 using Maliev.IAMService.Api.Health;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Data;
-using Maliev.IAMService.Data.Repositories;
+using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Infrastructure.Persistence;
+using Maliev.IAMService.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 // Initialize bootstrap logging

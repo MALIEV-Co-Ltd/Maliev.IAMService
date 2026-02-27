@@ -1,4 +1,4 @@
-using Maliev.IAMService.Api.Services;
+using Maliev.IAMService.Application.Services;
 using Maliev.MessagingContracts.Contracts.Iam;
 using MassTransit;
 

@@ -1,12 +1,12 @@
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Api.Authorization;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Models.Responses;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Data;
-using Maliev.IAMService.Data.Entities;
-using Maliev.IAMService.Data.Repositories;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.DTOs.Responses;
+using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Domain.Entities;
+using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

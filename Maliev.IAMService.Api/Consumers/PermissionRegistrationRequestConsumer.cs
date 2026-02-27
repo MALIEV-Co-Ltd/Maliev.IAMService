@@ -1,8 +1,8 @@
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Data;
-using Maliev.IAMService.Data.Entities;
-using Maliev.IAMService.Data.Repositories;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Domain.Entities;
+using Maliev.IAMService.Infrastructure.Persistence;
 using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts;
 using MassTransit;

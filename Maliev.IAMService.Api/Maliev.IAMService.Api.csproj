@@ -12,13 +12,15 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' != 'true'">
-    <ProjectReference Include="..\Maliev.IAMService.Data\Maliev.IAMService.Data.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Application\Maliev.IAMService.Application.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Infrastructure\Maliev.IAMService.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Maliev.Aspire\Maliev.Aspire.ServiceDefaults\Maliev.Aspire.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\Maliev.MessagingContracts\generated\csharp\Maliev.MessagingContracts.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <ProjectReference Include="..\Maliev.IAMService.Data\Maliev.IAMService.Data.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Application\Maliev.IAMService.Application.csproj" />
+    <ProjectReference Include="..\Maliev.IAMService.Infrastructure\Maliev.IAMService.Infrastructure.csproj" />
     <PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="$(SharedLibraryVersion)" />
     <PackageReference Include="Maliev.MessagingContracts" Version="$(SharedLibraryVersion)" />
   </ItemGroup>

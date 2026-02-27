@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Models.Responses;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Tests.Testing;
 
 namespace Maliev.IAMService.Tests.Integration;
