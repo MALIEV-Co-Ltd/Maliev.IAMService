@@ -15,7 +15,7 @@ public class RolesControllerExtendedTests : BaseIntegrationTest
     private async Task<string> SetupServiceAndRole(string testName)
     {
         var serviceName = $"role-ext-test-{testName}";
-        
+
         var permRequest = new RegisterPermissionsRequest
         {
             ServiceName = serviceName,
