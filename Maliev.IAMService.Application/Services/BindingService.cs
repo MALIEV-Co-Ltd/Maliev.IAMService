@@ -2,8 +2,8 @@ using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
-using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts;
+using Maliev.MessagingContracts.Contracts.Iam;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
