@@ -1,8 +1,8 @@
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults.Authorization;
-using Maliev.IAMService.Api.Authorization;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Services;
+using Maliev.IAMService.Domain.Constants;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -47,7 +47,7 @@ public class RolesController : ControllerBase
     /// <response code="200">Returns the registered role details.</response>
     /// <response code="400">If the role format is invalid or references non-existent permissions.</response>
     [HttpPost("register")]
-    [Authorize] // Restricted to authorized services/principals
+    [RequirePermission(IAMPermissions.RolesCreate)]
     public async Task<IActionResult> RegisterRoles([FromBody] RegisterRolesRequest request, CancellationToken cancellationToken)
     {
         try

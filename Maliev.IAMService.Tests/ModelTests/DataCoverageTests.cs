@@ -1,4 +1,4 @@
-using Maliev.IAMService.Api.Authorization;
+using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Tests.Testing;
 using Xunit;
 

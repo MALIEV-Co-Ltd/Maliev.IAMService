@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="Maliev.IAMService.Api/Maliev.IAMService.Api.csproj" />
-  <Project Path="Maliev.IAMService.Data/Maliev.IAMService.Data.csproj" />
+  <Project Path="Maliev.IAMService.Application/Maliev.IAMService.Application.csproj" />
+  <Project Path="Maliev.IAMService.Domain/Maliev.IAMService.Domain.csproj" />
+  <Project Path="Maliev.IAMService.Infrastructure/Maliev.IAMService.Infrastructure.csproj" />
   <Project Path="Maliev.IAMService.Tests/Maliev.IAMService.Tests.csproj" />
 </Solution>

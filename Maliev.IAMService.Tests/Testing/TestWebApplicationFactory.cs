@@ -1,4 +1,4 @@
-using Maliev.IAMService.Data;
+using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;

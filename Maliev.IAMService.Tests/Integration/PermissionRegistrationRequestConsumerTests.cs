@@ -1,10 +1,10 @@
 using Maliev.Aspire.ServiceDefaults.IAM;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Services;
-using Maliev.IAMService.Data;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Infrastructure.Persistence;
 using Maliev.IAMService.Tests.Testing;
-using Maliev.MessagingContracts.Contracts.Iam;
 using Maliev.MessagingContracts;
+using Maliev.MessagingContracts.Contracts.Iam;
 using MassTransit;
 using MassTransit.Testing;
 using Microsoft.EntityFrameworkCore;

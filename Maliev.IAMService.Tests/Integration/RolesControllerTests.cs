@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
-using Maliev.IAMService.Api.Models.Requests;
-using Maliev.IAMService.Api.Models.Responses;
-using Maliev.IAMService.Api.Services;
+using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.DTOs.Responses;
+using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Tests.Testing;
 using Microsoft.Extensions.DependencyInjection;
 

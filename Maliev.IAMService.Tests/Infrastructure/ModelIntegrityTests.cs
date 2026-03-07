@@ -1,4 +1,4 @@
-using Maliev.IAMService.Data;
+using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -26,6 +26,6 @@ public class ModelIntegrityTests
 
         Assert.False(hasChanges,
             "The EF Core model for 'IAMDbContext' has changed but no migration has been added. " +
-            "Run 'dotnet ef migrations add <Name> --project Maliev.IAMService.Data --startup-project Maliev.IAMService.Api' to fix this.");
+            "Run 'dotnet ef migrations add <Name> --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Api' to fix this.");
     }
 }

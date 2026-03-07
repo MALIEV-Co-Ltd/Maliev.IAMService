@@ -17,8 +17,9 @@ WORKDIR /src
 # Copy nuget.config and project files
 COPY ["nuget.config", "."]
 COPY ["Maliev.IAMService.Api/Maliev.IAMService.Api.csproj", "Maliev.IAMService.Api/"]
-COPY ["Maliev.IAMService.Data/Maliev.IAMService.Data.csproj", "Maliev.IAMService.Data/"]
-COPY ["Maliev.IAMService.Contracts/Maliev.IAMService.Contracts.csproj", "Maliev.IAMService.Contracts/"]
+COPY ["Maliev.IAMService.Application/Maliev.IAMService.Application.csproj", "Maliev.IAMService.Application/"]
+COPY ["Maliev.IAMService.Domain/Maliev.IAMService.Domain.csproj", "Maliev.IAMService.Domain/"]
+COPY ["Maliev.IAMService.Infrastructure/Maliev.IAMService.Infrastructure.csproj", "Maliev.IAMService.Infrastructure/"]
 
 # Restore with GitHub Packages authentication using BuildKit secrets
 RUN --mount=type=secret,id=nuget_username \
