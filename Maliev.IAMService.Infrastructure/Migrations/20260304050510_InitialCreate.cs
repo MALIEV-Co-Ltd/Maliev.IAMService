@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Net;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Maliev.IAMService.Infrastructure.Persistence.Migrations
+namespace Maliev.IAMService.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -30,7 +30,7 @@ namespace Maliev.IAMService.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_iamaudit_logs", x => x.log_id);
-                    table.CheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\r\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\r\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
+                    table.CheckConstraint("CK_AuditLog_Action", "action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',\n                'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',\n                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')");
                 });
 
             migrationBuilder.CreateTable(
@@ -67,7 +67,7 @@ namespace Maliev.IAMService.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_principals", x => x.principal_id);
-                    table.CheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account')");
+                    table.CheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account', 'system')");
                 });
 
             migrationBuilder.CreateTable(
