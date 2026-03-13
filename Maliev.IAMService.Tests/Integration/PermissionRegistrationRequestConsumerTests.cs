@@ -35,7 +35,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -116,7 +116,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -178,7 +178,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -226,7 +226,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -270,7 +270,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -287,7 +287,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -331,7 +331,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -376,7 +376,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },
@@ -393,7 +393,7 @@ public class PermissionRegistrationRequestConsumerTests : BaseIntegrationTest
         {
             MessageId = Guid.NewGuid(),
             MessageName = nameof(PermissionRegistrationRequest),
-            MessageType = MessageType.Request,
+            MessageType = Maliev.MessagingContracts.Contracts.Shared.MessageType.Request,
             MessageVersion = "1.0.0",
             PublishedBy = "test",
             ConsumedBy = new List<string> { "iam" },

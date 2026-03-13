@@ -141,7 +141,7 @@ public class PermissionService : IPermissionService
                     var events = permissionsToCreate.Select(p => new PermissionRegisteredEvent(
                         MessageId: Guid.NewGuid(),
                         MessageName: nameof(PermissionRegisteredEvent),
-                        MessageType: MessageType.Event,
+                        MessageType: Maliev.MessagingContracts.Contracts.Shared.MessageType.Event,
                         MessageVersion: "1.0.0",
                         PublishedBy: "iam",
                         ConsumedBy: [],

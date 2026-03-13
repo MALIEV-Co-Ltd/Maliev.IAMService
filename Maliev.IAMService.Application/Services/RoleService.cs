@@ -319,7 +319,7 @@ public class RoleService : IRoleService
         var roleUpdatedEvent = new RoleUpdatedEvent(
             MessageId: Guid.NewGuid(),
             MessageName: nameof(RoleUpdatedEvent),
-            MessageType: MessageType.Event,
+            MessageType: Maliev.MessagingContracts.Contracts.Shared.MessageType.Event,
             MessageVersion: "1.0.0",
             PublishedBy: "iam",
             ConsumedBy: [],

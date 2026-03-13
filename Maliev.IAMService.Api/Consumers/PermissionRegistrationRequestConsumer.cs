@@ -117,7 +117,7 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
             await _publishEndpoint.Publish(new PermissionRegistrationCompleted(
                 MessageId: Guid.NewGuid(),
                 MessageName: nameof(PermissionRegistrationCompleted),
-                MessageType: MessageType.Event,
+                MessageType: Maliev.MessagingContracts.Contracts.Shared.MessageType.Event,
                 MessageVersion: "1.0.0",
                 PublishedBy: "iam",
                 ConsumedBy: [],

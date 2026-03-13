@@ -136,7 +136,7 @@ public class BindingService : IBindingService
             var principalRoleGrantedEvent = new PrincipalRoleGrantedEvent(
                 MessageId: Guid.NewGuid(),
                 MessageName: nameof(PrincipalRoleGrantedEvent),
-                MessageType: MessageType.Event,
+                MessageType: Maliev.MessagingContracts.Contracts.Shared.MessageType.Event,
                 MessageVersion: "1.0.0",
                 PublishedBy: "iam",
                 ConsumedBy: [],
@@ -190,7 +190,7 @@ public class BindingService : IBindingService
             var principalRoleRevokedEvent = new PrincipalRoleRevokedEvent(
                 MessageId: Guid.NewGuid(),
                 MessageName: nameof(PrincipalRoleRevokedEvent),
-                MessageType: MessageType.Event,
+                MessageType: Maliev.MessagingContracts.Contracts.Shared.MessageType.Event,
                 MessageVersion: "1.0.0",
                 PublishedBy: "iam",
                 ConsumedBy: [],
