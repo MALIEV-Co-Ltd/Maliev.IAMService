@@ -267,18 +267,25 @@ public class PrincipalsController : ControllerBase
         var roleRepo = HttpContext.RequestServices.GetRequiredService<IRoleRepository>();
         var bindingService = HttpContext.RequestServices.GetRequiredService<IBindingService>();
 
+        var email = User.FindFirst("email")?.Value ?? "admin@maliev.com";
+        var name = User.FindFirst("name")?.Value ?? "System Admin";
+
         // 1. Ensure Principal exists (Idempotent creation for bootstrap)
-        var principal = await principalRepo.GetByIdAsync(principalId, ct);
+        // If principalId is Guid.Empty (Google SSO pre-IAM bootstrap), look up by email first.
+        var principal = principalId != Guid.Empty
+            ? await principalRepo.GetByIdAsync(principalId, ct)
+            : await principalRepo.GetByEmailAsync(email, ct);
+
         if (principal == null)
         {
             _logger.LogInformation("Creating principal {PrincipalId} during bootstrap promotion.", principalId);
 
-            var email = User.FindFirst("email")?.Value ?? "admin@maliev.com";
-            var name = User.FindFirst("name")?.Value ?? "System Admin";
+            // Assign a real GUID when principalId is Guid.Empty (Google SSO pre-IAM bootstrap)
+            var effectivePrincipalId = principalId != Guid.Empty ? principalId : Guid.NewGuid();
 
             principal = new Principal
             {
-                PrincipalId = principalId,
+                PrincipalId = effectivePrincipalId,
                 Email = email,
                 DisplayName = name,
                 PrincipalType = "user",
@@ -291,10 +298,12 @@ public class PrincipalsController : ControllerBase
             {
                 await principalRepo.CreateAsync(principal, ct);
             }
-            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" or "23503" })
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
             {
-                _logger.LogInformation("Principal {PrincipalId} was created by another process, continuing.", principalId);
-                principal = await principalRepo.GetByIdAsync(principalId, ct);
+                // IX_principals_email fired — principal with this email already exists.
+                // Fall back to lookup by email (may have a different PrincipalId assigned by another process).
+                _logger.LogInformation("Principal with email {Email} already exists, looking up by email.", email);
+                principal = await principalRepo.GetByEmailAsync(email, ct);
             }
         }
 
@@ -306,11 +315,14 @@ public class PrincipalsController : ControllerBase
 
         const string adminRoleId = "roles.platform.owner";
 
+        // Use the resolved principal ID (may differ from original principalId if it was Guid.Empty)
+        var resolvedPrincipalId = principal.PrincipalId;
+
         // Use BindingService to get existing bindings (handles expiry)
-        var existingBindings = await bindingService.GetBindingsAsync(principalId, ct);
+        var existingBindings = await bindingService.GetBindingsAsync(resolvedPrincipalId, ct);
         if (existingBindings.Any(b => b.RoleId == adminRoleId && (string.IsNullOrEmpty(b.ResourcePath) || b.ResourcePath == "*")))
         {
-            _logger.LogInformation("Principal {PrincipalId} already has the {RoleId} role. Skipping promotion.", principalId, adminRoleId);
+            _logger.LogInformation("Principal {PrincipalId} already has the {RoleId} role. Skipping promotion.", resolvedPrincipalId, adminRoleId);
             return;
         }
 
@@ -348,17 +360,17 @@ public class PrincipalsController : ControllerBase
         // 3. Grant Role using BindingService (handles cache invalidation and events)
         try
         {
-            await bindingService.GrantRoleAsync(principalId, new GrantRoleRequest
+            await bindingService.GrantRoleAsync(resolvedPrincipalId, new GrantRoleRequest
             {
                 RoleId = adminRoleId,
                 ResourcePath = "*"
             }, IAMDbContext.SystemPrincipalId, ct);
 
-            _logger.LogInformation("Successfully promoted principal {PrincipalId} to {RoleId}", principalId, adminRoleId);
+            _logger.LogInformation("Successfully promoted principal {PrincipalId} to {RoleId}", resolvedPrincipalId, adminRoleId);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
         {
-            _logger.LogInformation("Binding already exists for {PrincipalId} and {RoleId}", principalId, adminRoleId);
+            _logger.LogInformation("Binding already exists for {PrincipalId} and {RoleId}", resolvedPrincipalId, adminRoleId);
         }
     }
 }

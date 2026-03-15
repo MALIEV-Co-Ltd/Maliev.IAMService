@@ -62,7 +62,7 @@ public class PermissionService : IPermissionService
     private readonly IPermissionRepository _permissionRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<PermissionService> _logger;
-    private static readonly SemaphoreSlim _registrationSemaphore = new(20, 20);
+    private static readonly SemaphoreSlim _registrationSemaphore = new(1, 1);
     private static readonly ConcurrentDictionary<string, byte> _recentlyRegisteredServices = new();
 
     /// <summary>

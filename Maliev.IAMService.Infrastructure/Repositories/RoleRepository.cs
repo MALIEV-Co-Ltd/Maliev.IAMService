@@ -76,9 +76,17 @@ public class RoleRepository : IRoleRepository
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
         {
+            // Detach ALL tracked entities — both parent Role and child RolePermission rows.
+            // Failing to detach children leaves orphaned RolePermission entries in the
+            // change tracker which then cause duplicate-key violations on the per-row retry.
             foreach (var r in roleList)
+            {
+                foreach (var rp in r.RolePermissions.ToList())
+                    _context.Entry(rp).State = EntityState.Detached;
                 _context.Entry(r).State = EntityState.Detached;
+            }
 
+            // Retry one-by-one, skipping roles that already exist.
             foreach (var role in roleList)
             {
                 await _context.Roles.AddAsync(role, cancellationToken);
@@ -88,6 +96,8 @@ public class RoleRepository : IRoleRepository
                 }
                 catch (DbUpdateException innerEx) when (innerEx.InnerException is PostgresException innerPgEx && innerPgEx.SqlState == "23505")
                 {
+                    foreach (var rp in role.RolePermissions.ToList())
+                        _context.Entry(rp).State = EntityState.Detached;
                     _context.Entry(role).State = EntityState.Detached;
                 }
             }

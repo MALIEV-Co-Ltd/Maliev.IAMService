@@ -2,6 +2,7 @@ using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Maliev.IAMService.Infrastructure.Repositories;
 
@@ -61,8 +62,16 @@ public class PrincipalRepository : IPrincipalRepository
     public async Task<Principal> CreateAsync(Principal principal, CancellationToken cancellationToken = default)
     {
         _context.Principals.Add(principal);
-        await _context.SaveChangesAsync(cancellationToken);
-        return principal;
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return principal;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
+        {
+            _context.Entry(principal).State = EntityState.Detached;
+            throw;
+        }
     }
 
     /// <inheritdoc/>

@@ -85,7 +85,7 @@ public class RoleService : IRoleService
     private readonly IAuditService _auditService;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<RoleService> _logger;
-    private static readonly SemaphoreSlim _registrationSemaphore = new(5, 5);
+    private static readonly SemaphoreSlim _registrationSemaphore = new(1, 1);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RoleService"/> class.

@@ -16,6 +16,10 @@ namespace Maliev.IAMService.Api.Consumers;
 /// </summary>
 public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistrationRequest>
 {
+    // Serialises all concurrent UpdateAdminRoleWithNewPermissionsAsync calls so that
+    // no two consumers race on the same roles.platform.owner row simultaneously.
+    private static readonly SemaphoreSlim _ownerRoleSemaphore = new(1, 1);
+
     private readonly IPermissionService _permissionService;
     private readonly IRoleService _roleService;
     private readonly IPublishEndpoint _publishEndpoint;
@@ -147,6 +151,7 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
     private async Task UpdateAdminRoleWithNewPermissionsAsync(List<string> newPermissionIds, CancellationToken cancellationToken)
     {
         const string ownerRoleId = "roles.platform.owner";
+        await _ownerRoleSemaphore.WaitAsync(cancellationToken);
         try
         {
             _logger.LogInformation("Ensuring {RoleId} exists and has {Count} newly registered permissions", ownerRoleId, newPermissionIds.Count);
@@ -179,50 +184,61 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
                     IsCustom = false
                 };
                 await _roleRepository.CreateAsync(ownerRole, cancellationToken);
+
+                // Reload from DB so that ownerRole is properly tracked with its persisted state
+                // and RolePermissions is an accurate reflection of what exists in the database.
+                ownerRole = await _roleRepository.GetByIdAsync(ownerRoleId, cancellationToken)
+                    ?? throw new InvalidOperationException($"Failed to reload role '{ownerRoleId}' after creation.");
             }
 
-            // 3. Ensure wildcard permission is assigned to owner role
-            if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == "*"))
+            // 3. Build the set of permission IDs that are already assigned, queried directly
+            // from the database to avoid stale in-memory state on the navigation collection.
+            var existingPermissionIds = await _dbContext.RolePermissions
+                .Where(rp => rp.RoleId == ownerRoleId)
+                .Select(rp => rp.PermissionId)
+                .ToHashSetAsync(cancellationToken);
+
+            // 4. Collect all permission IDs that need to be inserted (wildcard + newly registered),
+            //    excluding any that already exist — single INSERT pass, no double SaveChanges.
+            var permissionsToAdd = new List<string>();
+
+            if (!existingPermissionIds.Contains("*"))
+                permissionsToAdd.Add("*");
+
+            foreach (var permId in newPermissionIds)
             {
-                ownerRole.RolePermissions.Add(new RolePermission
-                {
-                    RoleId = ownerRoleId,
-                    PermissionId = "*"
-                });
-                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
+                if (!existingPermissionIds.Contains(permId))
+                    permissionsToAdd.Add(permId);
             }
 
-            // 4. Fetch the newly registered permissions from DB
-            var allPermissions = await _permissionRepository.GetAllAsync(cancellationToken);
-            var newPermissions = allPermissions.Where(p => newPermissionIds.Contains(p.PermissionId)).ToList();
-
-            if (!newPermissions.Any())
+            if (permissionsToAdd.Count == 0)
             {
-                _logger.LogWarning("No new permissions found in database for IDs: [{Ids}]", string.Join(", ", newPermissionIds));
+                _logger.LogInformation("{RoleId} already has all required permissions — nothing to update.", ownerRoleId);
+                await InvalidatePermissionCacheForRoleAsync(ownerRoleId, cancellationToken);
                 return;
             }
 
-            // 5. Add each new permission to owner role (if not already assigned)
-            var addedCount = 0;
-            foreach (var permission in newPermissions)
-            {
-                if (!ownerRole.RolePermissions.Any(rp => rp.PermissionId == permission.PermissionId))
+            // 5. Insert only the missing RolePermission rows directly via the DbSet so that EF
+            //    does not re-examine and re-mark the entire tracked role graph. This avoids the
+            //    duplicate-key violation caused by calling Roles.Update() on an already-tracked
+            //    aggregate whose children have previously been saved.
+            var newEntries = permissionsToAdd
+                .Select(permId => new RolePermission
                 {
-                    ownerRole.RolePermissions.Add(new RolePermission
-                    {
-                        RoleId = ownerRoleId,
-                        PermissionId = permission.PermissionId
-                    });
-                    addedCount++;
-                }
-            }
+                    RoleId = ownerRoleId,
+                    PermissionId = permId
+                })
+                .ToList();
 
-            if (addedCount > 0)
-            {
-                await _roleRepository.UpdateAsync(ownerRole, cancellationToken);
-                _logger.LogInformation("Updated {RoleId} with {Count} permissions: {Permissions}",
-                    ownerRoleId, addedCount, string.Join(", ", newPermissions.Select(p => p.PermissionId)));
-            }
+            await _dbContext.RolePermissions.AddRangeAsync(newEntries, cancellationToken);
+
+            // Update the role's UpdatedAt timestamp without touching the navigation collection.
+            ownerRole.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Updated {RoleId} with {Count} new permissions: {Permissions}",
+                ownerRoleId, permissionsToAdd.Count, string.Join(", ", permissionsToAdd));
 
             // 6. Invalidate permission cache for all users with this role
             await InvalidatePermissionCacheForRoleAsync(ownerRoleId, cancellationToken);
@@ -231,6 +247,10 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
         {
             _logger.LogError(ex, "Failed to update admin role with new permissions");
             // Don't rethrow - permission registration should succeed even if role update fails
+        }
+        finally
+        {
+            _ownerRoleSemaphore.Release();
         }
     }
 
