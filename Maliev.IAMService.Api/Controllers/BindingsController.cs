@@ -14,7 +14,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Supports granting, revoking, and querying role assignments with audit trail support.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/principals/{principalId}/roles")]
 public class BindingsController : ControllerBase
 {

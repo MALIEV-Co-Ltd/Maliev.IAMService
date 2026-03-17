@@ -14,7 +14,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Supports both built-in roles (registered by services) and custom user-defined roles.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/roles")]
 public class RolesController : ControllerBase
 {

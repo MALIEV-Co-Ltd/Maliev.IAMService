@@ -13,7 +13,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// This controller manages the permission catalog across different services.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/permissions")]
 public class PermissionsController : ControllerBase
 {

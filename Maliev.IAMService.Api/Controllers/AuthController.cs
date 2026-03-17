@@ -13,7 +13,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Controller for authentication and authorization operations including permission checks and JWT token management.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/auth")]
 public class AuthController : ControllerBase
 {

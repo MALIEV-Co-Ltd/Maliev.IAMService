@@ -18,7 +18,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Supports both human users and automated service accounts.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/principals")]
 public class PrincipalsController : ControllerBase
 {

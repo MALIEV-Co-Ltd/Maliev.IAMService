@@ -12,7 +12,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Controller for managing service accounts and their API keys.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/service-accounts")]
 public class ServiceAccountsController : ControllerBase
 {

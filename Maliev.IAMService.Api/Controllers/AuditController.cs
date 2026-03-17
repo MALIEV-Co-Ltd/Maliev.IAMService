@@ -15,7 +15,7 @@ namespace Maliev.IAMService.Api.Controllers;
 /// Supports filtering by date range, principal, and action type with pagination support.
 /// </summary>
 [ApiController]
-[ApiVersion("1.0")]
+[ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/audit")]
 public class AuditController : ControllerBase
 {
