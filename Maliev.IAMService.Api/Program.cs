@@ -34,6 +34,9 @@ try
     // ===== Database Configuration =====
     builder.AddPostgresDbContext<IAMDbContext>("IamDbContext");
 
+    // ===== IAM Infrastructure Seeder (runs early, seeds system principal, roles, etc.) =====
+    builder.Services.AddHostedService<IAMInfrastructureSeederHostedService>();
+
     // ===== Repository Layer Registration =====
     builder.Services.AddScoped<IPrincipalRepository, PrincipalRepository>();
     builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();

@@ -70,6 +70,9 @@ public class PrincipalRepository : IPrincipalRepository
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException pgEx && pgEx.SqlState == "23505")
         {
             _context.Entry(principal).State = EntityState.Detached;
+            var existing = await GetByEmailAsync(principal.Email!, cancellationToken);
+            if (existing != null)
+                return existing;
             throw;
         }
     }
