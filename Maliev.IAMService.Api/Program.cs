@@ -4,6 +4,7 @@ using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Maliev.IAMService.Infrastructure.Repositories;
+using Maliev.Aspire.ServiceDefaults.IAM;
 using Microsoft.EntityFrameworkCore;
 
 // Initialize bootstrap logging
@@ -74,6 +75,9 @@ try
         x.AddConsumer<Maliev.IAMService.Api.Consumers.PermissionRegistrationRequestConsumer>();
         x.AddConsumer<Maliev.IAMService.Api.Consumers.EmployeeCreatedConsumer>();
     });
+
+    // ===== IAM Registration =====
+    builder.Services.AddIAMRegistration<IAMIAMRegistrationService>("iam");
 
     // --- API Configuration ---
     builder.AddStandardCors(); // CORS with fail-fast validation

@@ -197,7 +197,7 @@ public class PrincipalService : IPrincipalService
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
-            await _principalRepository.CreateAsync(principal, cancellationToken);
+            principal = await _principalRepository.CreateAsync(principal, cancellationToken);
         }
 
         if (principal != null && principal.PrincipalType == "system")
