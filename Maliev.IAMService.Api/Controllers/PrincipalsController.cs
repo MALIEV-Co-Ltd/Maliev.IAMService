@@ -211,7 +211,7 @@ public class PrincipalsController : ControllerBase
     /// Deletes a principal and all its associated bindings.
     /// </summary>
     /// <param name="id">The unique identifier of the principal to delete.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("{id}")]
     [RequirePermission(IAMPermissions.PrincipalsDelete)]
@@ -219,6 +219,34 @@ public class PrincipalsController : ControllerBase
     {
         await _principalService.DeleteAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Grants a role to a principal.
+    /// Used by AuthService during auto-provisioning of the first @maliev.com employee
+    /// to synchronously assign the Platform Owner role before issuing the JWT.
+    /// </summary>
+    /// <param name="id">The unique identifier of the principal.</param>
+    /// <param name="request">The role grant request.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>No content on success.</returns>
+    [HttpPost("{id:guid}/roles")]
+    [RequirePermission(IAMPermissions.BindingsCreate)]
+    public async Task<IActionResult> GrantRole(Guid id, [FromBody] GrantRoleRequest request, CancellationToken cancellationToken)
+    {
+        var bindingService = HttpContext.RequestServices.GetRequiredService<IBindingService>();
+
+        try
+        {
+            await bindingService.GrantRoleAsync(id, request, IAMDbContext.SystemPrincipalId, cancellationToken);
+            _logger.LogInformation("Granted role {RoleId} to principal {PrincipalId}", request.RoleId, id);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
+        {
+            _logger.LogInformation("Role binding already exists for principal {PrincipalId} and role {RoleId}. Ignoring.", id, request.RoleId);
+            return NoContent();
+        }
     }
 
     /// <summary>
