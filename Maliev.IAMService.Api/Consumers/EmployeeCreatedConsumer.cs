@@ -108,18 +108,21 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                 _logger.LogInformation("Principal {PrincipalId} / {Email} already created by another process.", payload.PrincipalId, payload.Email);
             }
 
-            // Check if this is the first non-system user to grant admin permissions
-            // We ignore the pre-seeded admin@maliev.com when determining the first real user
+            // Grant Platform Owner only to the FIRST @maliev.com employee via Google SSO.
+            // Customers and non-@maliev.com emails never receive Platform Owner automatically.
             var allUsers = (await _principalRepository.GetAllAsync(context.CancellationToken)).ToList();
-            var realUsers = allUsers.Where(p =>
+            var malievEmployees = allUsers.Where(p =>
                 p.PrincipalType == "user" &&
-                p.Email != "admin@maliev.com").ToList();
+                p.Email != null &&
+                p.Email.EndsWith("@maliev.com", StringComparison.OrdinalIgnoreCase)).ToList();
 
-            bool isFirstRealUser = realUsers.Count == 1 && realUsers.First().PrincipalId == payload.PrincipalId;
+            bool isFirstMalievEmployee = malievEmployees.Count == 1
+                && malievEmployees.First().PrincipalId == payload.PrincipalId
+                && payload.PrincipalId != Guid.Empty;
 
-            if (isFirstRealUser)
+            if (isFirstMalievEmployee)
             {
-                _logger.LogInformation("First real user detected ({Email}). Bootstrapping admin role.", payload.Email);
+                _logger.LogInformation("First @maliev.com employee detected ({Email}). Bootstrapping admin role.", payload.Email);
                 await BootstrapAdminRoleAsync(payload.PrincipalId, context.CancellationToken);
             }
         }
