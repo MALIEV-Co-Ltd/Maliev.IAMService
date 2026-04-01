@@ -199,7 +199,9 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                         ? allPermissions
                         : allPermissions.Where(p => p.ServiceName == serviceFilter).ToList();
 
-                    if (!filteredPermissions.Any())
+                    // Platform Owner only needs the wildcard '*' permission (added below),
+                    // so don't block on waiting for service permissions to be registered.
+                    if (!filteredPermissions.Any() && roleId != PlatformOwnerRoleId)
                     {
                         if (attempt < maxRetries - 1)
                         {
