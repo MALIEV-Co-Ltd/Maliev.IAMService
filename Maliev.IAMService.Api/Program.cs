@@ -25,10 +25,6 @@ try
     builder.AddServiceDefaults();
     builder.AddServiceMeters("iam-service");
 
-    // ===== Custom IAM Readiness Health Check =====
-    builder.Services.AddHealthChecks()
-        .AddCheck<IAMReadinessHealthCheck>("iam_ready", tags: new[] { "ready" });
-
     // ===== IAM Initialization Hosted Service =====
     builder.Services.AddHostedService<IAMInitializationHostedService>();
 
