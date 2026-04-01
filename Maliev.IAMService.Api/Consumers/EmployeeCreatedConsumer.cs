@@ -80,7 +80,22 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
 
             if (existing != null)
             {
-                _logger.LogInformation("Principal {PrincipalId} already exists, skipping provisioning.", payload.PrincipalId);
+                _logger.LogInformation("Principal {PrincipalId} already exists, checking bootstrap status.", payload.PrincipalId);
+
+                // Even if the principal exists, check if bootstrap is needed (handles retries/stale state)
+                var ownerExistsForExisting = await (
+                    from b in _dbContext.PrincipalRoleBindings
+                    join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
+                    where b.RoleId == PlatformOwnerRoleId && p.PrincipalType == "user"
+                    select b.BindingId
+                ).AnyAsync(context.CancellationToken);
+
+                if (!ownerExistsForExisting && payload.Email.EndsWith("@maliev.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation("No Platform Owner exists. Bootstrapping existing principal {Email} ({PrincipalId}).",
+                        payload.Email, existing.PrincipalId);
+                    await BootstrapAdminRoleAsync(existing.PrincipalId, context.CancellationToken);
+                }
                 return;
             }
 
@@ -108,21 +123,18 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                 _logger.LogInformation("Principal {PrincipalId} / {Email} already created by another process.", payload.PrincipalId, payload.Email);
             }
 
-            // Grant Platform Owner only to the FIRST @maliev.com employee via Google SSO.
-            // Customers and non-@maliev.com emails never receive Platform Owner automatically.
-            var allUsers = (await _principalRepository.GetAllAsync(context.CancellationToken)).ToList();
-            var malievEmployees = allUsers.Where(p =>
-                p.PrincipalType == "user" &&
-                p.Email != null &&
-                p.Email.EndsWith("@maliev.com", StringComparison.OrdinalIgnoreCase)).ToList();
+            // Grant Platform Owner to the first @maliev.com employee that logs in, if no owner exists yet.
+            // Checking binding existence (not principal count) so retries and stale principals don't block bootstrap.
+            var platformOwnerExists = await (
+                from b in _dbContext.PrincipalRoleBindings
+                join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
+                where b.RoleId == PlatformOwnerRoleId && p.PrincipalType == "user"
+                select b.BindingId
+            ).AnyAsync(context.CancellationToken);
 
-            bool isFirstMalievEmployee = malievEmployees.Count == 1
-                && malievEmployees.First().PrincipalId == payload.PrincipalId
-                && payload.PrincipalId != Guid.Empty;
-
-            if (isFirstMalievEmployee)
+            if (!platformOwnerExists && payload.Email.EndsWith("@maliev.com", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogInformation("First @maliev.com employee detected ({Email}). Bootstrapping admin role.", payload.Email);
+                _logger.LogInformation("No Platform Owner exists. Bootstrapping {Email} ({PrincipalId}).", payload.Email, payload.PrincipalId);
                 await BootstrapAdminRoleAsync(payload.PrincipalId, context.CancellationToken);
             }
         }

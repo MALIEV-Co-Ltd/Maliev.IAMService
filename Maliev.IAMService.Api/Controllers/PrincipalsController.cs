@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Microsoft.EntityFrameworkCore;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
@@ -274,10 +275,15 @@ public class PrincipalsController : ControllerBase
     [HttpPost("bootstrap/promote")]
     public async Task<IActionResult> PromoteCallerToAdmin(CancellationToken cancellationToken)
     {
-        var principals = (await _principalService.GetPrincipalsAsync(cancellationToken)).ToList();
-        var humanUsers = principals.Where(p => p.PrincipalType == "user").ToList();
+        var iamDb = HttpContext.RequestServices.GetRequiredService<IAMDbContext>();
+        var platformOwnerExists = await (
+            from b in iamDb.PrincipalRoleBindings
+            join p in iamDb.Principals on b.PrincipalId equals p.PrincipalId
+            where b.RoleId == "roles.platform.owner" && p.PrincipalType == "user"
+            select b.BindingId
+        ).AnyAsync(cancellationToken);
 
-        if (humanUsers.Count > 1)
+        if (platformOwnerExists)
         {
             return BadRequest(new { error = "System is already bootstrapped." });
         }
