@@ -242,10 +242,15 @@ public class PrincipalsController : ControllerBase
             _logger.LogInformation("Granted role {RoleId} to principal {PrincipalId}", request.RoleId, id);
             return NoContent();
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation("Role binding already exists for principal {PrincipalId} and role {RoleId}. Ignoring.", id, request.RoleId);
             return NoContent();
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Principal or role not found when granting role {RoleId} to principal {PrincipalId}: {Message}", request.RoleId, id, ex.Message);
+            return NotFound(new { error = ex.Message });
         }
     }
 
@@ -277,11 +282,16 @@ public class PrincipalsController : ControllerBase
             return BadRequest(new { error = "System is already bootstrapped." });
         }
 
+        // Accept either a GUID sub (platform JWT) or a non-GUID sub (Google numeric sub).
+        // When sub is not a GUID, principalId becomes Guid.Empty and BootstrapAdminRoleAsync
+        // will resolve the principal by email instead.
         var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var principalId))
+        if (string.IsNullOrEmpty(userIdClaim))
         {
             return Unauthorized(new { error = "Valid principal ID not found in token." });
         }
+
+        Guid.TryParse(userIdClaim, out var principalId);
 
         await BootstrapAdminRoleAsync(principalId, cancellationToken);
 
