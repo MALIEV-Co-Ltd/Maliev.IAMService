@@ -269,28 +269,30 @@ public class PrincipalsController : ControllerBase
     }
 
     /// <summary>
-    /// Promotes the currently authenticated user to IAM Administrator.
-    /// Only allowed if the system has 1 or fewer users (Bootstrap mode).
+    /// Promotes the currently authenticated user to Platform Owner.
+    /// Only succeeds if no human user (PrincipalType == "user") already holds roles.platform.owner.
     /// </summary>
+    /// <remarks>
+    /// Called by IntranetBff's OnTicketReceived handler after every first login attempt.
+    /// Returns 200 OK when this call grants the role, or 400 BadRequest when the
+    /// EmployeeCreatedConsumer already did so via RabbitMQ (bootstrap race).
+    ///
+    /// ⚠ IntranetBff MUST re-exchange the token on BOTH 200 and 400 — the JWT present in the
+    /// cookie at callback time was issued before the role was granted, so it carries zero
+    /// permissions regardless of which path wins the race.  See IntranetBff/Program.cs
+    /// OnTicketReceived for the matching comment.
+    ///
+    /// ⚠ SYSTEM PRINCIPAL FILTER — the join on PrincipalType == "user" is NOT optional.
+    /// PrincipalService auto-grants roles.platform.owner to every "system" service principal
+    /// at startup.  Without this filter, those bindings would make platformOwnerExists = true
+    /// and this endpoint would always return 400 even on a fresh DB, preventing the first
+    /// human user from ever gaining permissions.
+    /// </remarks>
     [HttpPost("bootstrap/promote")]
     public async Task<IActionResult> PromoteCallerToAdmin(CancellationToken cancellationToken)
     {
         var iamDb = HttpContext.RequestServices.GetRequiredService<IAMDbContext>();
-        var platformOwnerExists = await (
-            from b in iamDb.PrincipalRoleBindings
-            join p in iamDb.Principals on b.PrincipalId equals p.PrincipalId
-            where b.RoleId == "roles.platform.owner" && p.PrincipalType == "user"
-            select b.BindingId
-        ).AnyAsync(cancellationToken);
 
-        if (platformOwnerExists)
-        {
-            return BadRequest(new { error = "System is already bootstrapped." });
-        }
-
-        // Accept either a GUID sub (platform JWT) or a non-GUID sub (Google numeric sub).
-        // When sub is not a GUID, principalId becomes Guid.Empty and BootstrapAdminRoleAsync
-        // will resolve the principal by email instead.
         var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim))
         {
@@ -298,6 +300,35 @@ public class PrincipalsController : ControllerBase
         }
 
         Guid.TryParse(userIdClaim, out var principalId);
+        var callerEmail = User.FindFirst("email")?.Value;
+
+        var principalRepo = HttpContext.RequestServices.GetRequiredService<IPrincipalRepository>();
+        var callerPrincipal = principalId != Guid.Empty
+            ? await principalRepo.GetByIdAsync(principalId, cancellationToken)
+            : (!string.IsNullOrEmpty(callerEmail) ? await principalRepo.GetByEmailAsync(callerEmail, cancellationToken) : null);
+
+        if (callerPrincipal != null)
+        {
+            var callerHasRole = await iamDb.PrincipalRoleBindings
+                .AnyAsync(b => b.PrincipalId == callerPrincipal.PrincipalId && b.RoleId == "roles/platform.owner", cancellationToken);
+
+            if (callerHasRole)
+            {
+                return Ok(new { message = "Already promoted." });
+            }
+        }
+
+        var platformOwnerExists = await (
+            from b in iamDb.PrincipalRoleBindings
+            join p in iamDb.Principals on b.PrincipalId equals p.PrincipalId
+            where b.RoleId == "roles/platform.owner" && p.PrincipalType == "user"
+            select b.BindingId
+        ).AnyAsync(cancellationToken);
+
+        if (platformOwnerExists)
+        {
+            return BadRequest(new { error = "System is already bootstrapped." });
+        }
 
         await BootstrapAdminRoleAsync(principalId, cancellationToken);
 

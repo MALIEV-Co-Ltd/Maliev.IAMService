@@ -207,7 +207,7 @@ public class PrincipalService : IPrincipalService
 
             if (!bindings.Any(b => b.RoleId == ownerRoleId))
             {
-                _logger.LogInformation("Repairing system principal {PrincipalId}: Granting missing {RoleId}", principalId, ownerRoleId);
+                _logger.LogDebug("Repairing system principal {PrincipalId}: Granting missing {RoleId}", principalId, ownerRoleId);
 
                 var ownerRole = await _roleRepository.GetByIdAsync(ownerRoleId, cancellationToken);
                 if (ownerRole != null)
