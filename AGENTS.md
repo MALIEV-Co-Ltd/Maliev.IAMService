@@ -2,23 +2,46 @@
 
 This guide provides essential information for agentic coding agents working in the `Maliev.IAMService` repository.
 
-## 🛠 Commands
-
-### Build & Run
-- **Build Solution**: `dotnet build`
-- **Run Api**: `dotnet run --project Maliev.IAMService.Api`
-- **Apply Database Migrations**: `dotnet ef database update --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Api`
-- **Add Migration**: `dotnet ef migrations add <MigrationName> --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Api`
-
-### Testing
-- **Run All Tests**: `dotnet test --verbosity normal`
-- **Run Single Test Class**: `dotnet test --filter "FullyQualifiedName~PermissionsControllerTests"`
-- **Run Single Test Method**: `dotnet test --filter "FullyQualifiedName=Maliev.IAMService.Tests.Integration.PermissionsControllerTests.RegisterPermissions_ValidRequest_ReturnsOk"`
-- **Generate Coverage**: `dotnet test /p:CollectCoverage=true`
+> **Workspace root** `B:\maliev` contains **41 independent git repos**. Each `Maliev.*` folder and `maliev-gitops` is its own repo. There is no single repo at the workspace root. Always work within the target service directory.
 
 ---
 
-## 🏗 Architecture & Tech Stack
+## Build, Test & Lint Commands
+
+All commands run from within this service directory (`B:\maliev\Maliev.IAMService`).
+
+```powershell
+# Build (treats warnings as errors — all must be fixed)
+dotnet build Maliev.IAMService.slnx
+
+# Run all tests
+dotnet test Maliev.IAMService.slnx --verbosity normal
+
+# Run a single test method
+dotnet test --filter "FullyQualifiedName~PermissionsControllerTests.RegisterPermissions_ValidRequest_ReturnsOk"
+
+# Run all tests in a class
+dotnet test --filter "FullyQualifiedName~PermissionsControllerTests"
+
+# Run with code coverage
+dotnet test Maliev.IAMService.slnx --collect:"XPlat Code Coverage"
+
+# Format check
+dotnet format Maliev.IAMService.slnx
+
+# EF Core migrations (Infrastructure project only)
+dotnet ef migrations add <Name> --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Infrastructure
+
+# Run Api
+dotnet run --project Maliev.IAMService.Api
+
+# Apply Database Migrations
+dotnet ef database update --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Api
+```
+
+---
+
+## Architecture & Tech Stack
 
 - **Framework**: ASP.NET Core 10.0 (C# 13)
 - **Database**: PostgreSQL 18 + EF Core 10
@@ -26,45 +49,64 @@ This guide provides essential information for agentic coding agents working in t
 - **Messaging**: MassTransit with RabbitMQ
 - **API Style**: RESTful with OpenAPI 3.1 + Scalar UI
 
-### Platform Development Mandates (Constitution)
-To maintain high performance and low complexity, follow these strict rules:
-- ❌ **AutoMapper Banned**: Use explicit manual mapping in constructors or mapping methods.
-- ❌ **FluentValidation Banned**: Use standard `System.ComponentModel.DataAnnotations` (`[Required]`, `[EmailAddress]`, etc.).
-- ❌ **FluentAssertions Banned**: Use standard xUnit `Assert` methods only.
-- ❌ **In-memory Test DB Banned**: Use **Testcontainers** for all integration tests.
-- ✅ **TreatWarningsAsErrors**: Must remain enabled.
-- ✅ **XML Documentation**: Required for all public classes, methods, and properties.
-- ✅ **No Secrets in Code**: Use environment variables or configuration providers.
+### Workspace Structure (this service)
+```
+Maliev.IAMService/
+├── Maliev.IAMService.Api/              # Controllers, Consumers, Middleware
+├── Maliev.IAMService.Application/      # Use cases, DTOs, Interfaces, Handlers
+├── Maliev.IAMService.Domain/           # Entities, value objects, domain interfaces
+├── Maliev.IAMService.Data/             # EF Core DbContext, Repositories, Entities
+├── Maliev.IAMService.Infrastructure/   # HTTP clients, external service integrations
+├── Maliev.IAMService.Tests/            # Unit + Integration tests (xUnit)
+├── Directory.Build.props               # Central package versioning
+└── Maliev.IAMService.slnx             # Solution file (.slnx preferred over .sln)
+```
 
 ---
 
-## 📝 Code Style & Conventions
+## Banned Libraries (Build Will Fail)
 
-### Imports
-- Organize usings: System first, then Third-party, then Maliev namespaces.
-- Use file-scoped namespaces: `namespace Maliev.IAMService.Api.Services;`
-
-### Formatting
-- Indentation: 4 spaces.
-- Braces: All on new lines (K&R style).
-- Empty Lines: Single empty line between methods and properties.
-
-### Naming Conventions
-- **Classes/Interfaces/Methods/Properties**: `PascalCase`.
-- **Private Fields**: `_camelCase`.
-- **Local Variables/Parameters**: `camelCase`.
-- **Interfaces**: Prefix with `I` (e.g., `IPermissionService`).
-- **Async Methods**: Always suffix with `Async` (e.g., `GetPrincipalAsync`).
-- **Permissions**: GCP-style `service.resource.action` (e.g., `iam.principals.create`).
-
-### Types & Models
-- **DTOs/Requests/Responses**: Use `public record` with `init` properties.
-- **Dependency Injection**: Prefer `Scoped` for repositories and services unless a specific reason exists for `Singleton` (e.g., `IRsaKeyProvider`).
-- **Required Properties**: Use the `required` modifier for mandatory fields in records.
+| Banned | Use Instead |
+|--------|-------------|
+| AutoMapper | Manual mapping extensions |
+| FluentValidation | DataAnnotations or manual validation |
+| FluentAssertions | Standard xUnit `Assert.*` |
+| Swashbuckle/Swagger | Scalar (at `/{service}/scalar`) |
+| InMemoryDatabase (EF Core) | Testcontainers with real PostgreSQL |
 
 ---
 
-## 💾 Database & Entities
+## Code Style & Conventions
+
+### C# Naming & Formatting
+- **Namespaces**: File-scoped (`namespace Maliev.IAMService.Api.Services;`)
+- **Classes/Methods/Properties**: `PascalCase`
+- **Private fields**: `_camelCase` (underscore prefix)
+- **Parameters/locals**: `camelCase`
+- **Async methods**: Suffix with `Async` (e.g., `GetPrincipalAsync`)
+- **Interfaces**: Prefix with `I` (e.g., `IPermissionService`)
+- **Permissions**: GCP-style `{domain}.{plural-resource}.{action}` as `public const string` in a `Permissions` static class
+  - Valid: `iam.permissions.create`, `iam.roles.list`
+  - Invalid: `iam.permission.create` (singular), `iam.create` (missing resource)
+- **XML docs**: Required on ALL public methods and properties
+- **Nullable**: Enabled (`<Nullable>enable</Nullable>`). Use `?` explicitly
+- **Imports**: System first, then third-party, then local. Alphabetize within groups. Remove unused `using`
+- **Braces**: Allman style (new line) for methods and control structures. Expression-bodied for properties/accessors
+- **Indentation**: 4 spaces, LF line endings, UTF-8, trim trailing whitespace
+
+### C# Patterns
+- **DI**: Constructor injection with `private readonly` fields
+- **Controllers**: `[ApiController]`, `[ApiVersion("1")]`, `[Route("iam/v{version:apiVersion}")]`
+- **Logging**: `ILogger<T>` with structured placeholders (never interpolate): `_logger.LogInformation("Processing {PrincipalId}", principalId)`
+- **Error handling**: Global exception middleware. Return `ProblemDetails` / `ErrorResponse` DTOs. Never expose stack traces
+- **Manual mapping**: Static extension methods (`ToDto()`, `ToEntity()`). AutoMapper is banned
+- **Validation**: `System.ComponentModel.DataAnnotations` on DTOs. FluentValidation is banned
+- **DTOs/Requests/Responses**: Use `public record` with `init` properties. Use the `required` modifier for mandatory fields.
+- **DI Scopes**: Prefer `Scoped` for repositories and services unless a specific reason exists for `Singleton` (e.g., `IRsaKeyProvider`).
+
+---
+
+## Database & Entities
 
 - **Entity Location**: `Maliev.IAMService.Data/Entities/`
 - **Naming**: Database tables and columns use `snake_case` (handled by `SnakeCaseNamingExtensions`).
@@ -73,13 +115,15 @@ To maintain high performance and low complexity, follow these strict rules:
 
 ---
 
-## 🧪 Testing Strategy
+## Testing Rules
 
-We prioritize **Integration Tests** over mock-heavy unit tests.
-- **Base Class**: Inherit from `BaseIntegrationTest`.
-- **Real Infrastructure**: Tests use `TestWebApplicationFactory` which spins up real PostgreSQL/Redis/RabbitMQ via Testcontainers.
-- **Database Cleaning**: Use `await CleanDatabaseAsync()` at the start of tests that depend on a clean state.
-- **Assertions**: Stick to `Assert.Equal`, `Assert.NotNull`, etc.
+- **Framework**: xUnit with standard `Assert` (`Assert.Equal`, `Assert.NotNull`, etc.)
+- **Naming**: `MethodName_StateUnderTest_ExpectedBehavior` or `HTTP_METHOD_Path_Scenario_ExpectedStatus`
+- **Coverage**: Minimum 80% per service
+- **Integration tests**: `BaseIntegrationTestFactory<TProgram, TDbContext>` with Testcontainers (PostgreSQL, Redis, RabbitMQ). Never InMemoryDatabase
+- **System tests** (Tier 3): `AspireTestFixture` with `[Collection("AspireDomainTests")]` — shared AppHost, never one per class
+- **Eventual consistency**: Use `TestHelpers.WaitForAsync`. Never `Task.Delay`
+- **MassTransit consumers**: Must have consumer tests using `AddMassTransitTestHarness()`
 
 ### Testing Strategy (4-Tier Pyramid Context)
 
@@ -92,27 +136,20 @@ This service's tests cover **Tier 1 (Unit)** and **Tier 2 (Service Integration)*
 
 **Tier 3 (System Integration)** — cross-service workflows and event chains — is tested in `Maliev.Aspire.Tests/`.
 
-#### Key Rules
-- Use `BaseIntegrationTestFactory<TProgram, TDbContext>` for integration tests (real Testcontainers, never InMemoryDatabase)
-- Every MassTransit consumer MUST have a consumer test using `services.AddMassTransitTestHarness()`
-- Test naming: `MethodName_StateUnderTest_ExpectedBehavior`
-- Minimum 80% code coverage
-- Use `[Fact]` for single cases, `[Theory]` for parameterized tests
-
 > Full ecosystem test strategy: `Maliev.Aspire.Tests/TEST_PLAN.md`
 
 ---
 
-## 🚨 Error Handling & Logging
+## Error Handling & Logging
 
 - **Exceptions**: Throw specific exceptions (e.g., `InvalidOperationException`, `NotFoundException`).
-- **Logging**: Use `ILogger<T>` and prefer High-Performance Logging with `[LoggerMessage]`.
+- **Logging**: Use `ILogger<T>` with structured placeholders (never interpolate). Prefer High-Performance Logging with `[LoggerMessage]`.
 - **Validation**: Rely on Controller `ModelState` validation from Data Annotations.
 - **API Responses**: Controllers should return `IActionResult` using standard helpers like `Ok()`, `NotFound()`, `BadRequest()`.
 
 ---
 
-## 🔗 Integration Patterns
+## Integration Patterns
 
 ### IAM Permissions
 Permissions are hierarchical. A binding on `orgs/1` automatically grants access to `orgs/1/projects/100` via path matching logic in `PermissionResolver`.
@@ -122,25 +159,20 @@ Services authenticate using JWTs generated via HMAC-SHA256 with a shared secret.
 
 ---
 
-## 🛠 Tooling Integration
-- **Cursor/Copilot**: Follow these rules strictly. If a suggested change uses a banned library, reject it and implement it using the approved patterns.
-- **OpenTelemetry**: All services are instrumented. Ensure new background tasks or critical paths include proper activity tracking.
-- **Build Verification**: Always verify any changes you made with a successful build (`dotnet build`). Never assume any changes will not result in a broken build.
+## Mandatory Rules
 
+- **`TreatWarningsAsErrors = true`**: Zero warnings allowed. No suppression
+- **`[RequirePermission("domain.resources.action")]`**: On all endpoints, not plain `[Authorize]`
+- **API versioning**: All routes versioned (`v1/`)
+- **Service prefix**: Routes prefixed with service domain (e.g., `/iam`)
+- **Scalar docs**: Configured at `/iam/scalar`
+- **Secrets**: Never hardcoded. Use GCP Secret Manager or environment variables
+- **Async/await**: All the way down. Pass `CancellationToken`
+- **EF Core Design package**: Only in Infrastructure project, never in Api
+- **PostgreSQL xmin**: Shadow property only — `entity.Property<uint>("xmin").HasColumnType("xid").IsRowVersion()`. Never add entity property
+- **Temporary files**: Generate in `/temp` folder, clean up afterwards
 
-## Git & Version Control — Mandatory Rules
-
-### 🚨 CRITICAL: Always Commit Code Changes (Non-Negotiable)
-- **You MUST commit your changes to the local repository after completing any meaningful unit of work.**
-- **Never accumulate uncommitted changes.** Do not wait until end of session or until something breaks.
-- **Commit early and often** — if a change is meaningful (even a small fix or refactor), commit it.
-- **You do NOT need to push to remote** — local commits are sufficient to protect against accidental loss.
-- **If you are unsure whether to commit, commit anyway.** Extra commits are harmless; lost work is irreversible.
-- This rule applies even if you are just "testing" or "exploring" — use git branches to isolate experimental work and commit those changes too.
-
-### 🚨 CRITICAL: Never Use `git checkout` to Restore Broken Files
-- **NEVER use `git checkout` to restore or recover files.** This operation discards uncommitted changes permanently and will result in data loss.
-- **To undo/recover from broken files: first commit your current changes, then use `git revert` or `git reset --soft` to safely undo.**
+---
 
 ## Database & EF Core — Mandatory Rules
 
@@ -149,7 +181,7 @@ Services authenticate using JWTs generated via HMAC-SHA256 with a shared secret.
 - ✅ It belongs ONLY in the Infrastructure (or Data) project where migrations live
 - Migration commands must target Infrastructure, not Api:
   ```
-  dotnet ef migrations add <Name> --project Maliev.<Domain>Service.Infrastructure --startup-project ../Maliev.<Domain>Service.Api
+  dotnet ef migrations add <Name> --project Maliev.IAMService.Infrastructure --startup-project Maliev.IAMService.Infrastructure
   ```
 
 ### PostgreSQL xmin Concurrency — Mandatory Pattern
@@ -160,3 +192,19 @@ entity.Property<uint>("xmin").HasColumnType("xid").IsRowVersion();
 - ❌ Never use `UseXminAsConcurrencyToken()` (removed in Npgsql EF v7)
 - ❌ Never use entity property `public uint Xmin { get; set; }` or `public uint xmin { get; set; }`
 - ❌ Never use `.Ignore(e => e.Xmin)` — remove the entity property instead
+
+---
+
+## Git Rules
+
+- Each `Maliev.*` folder is an independent git repo. `cd` into it before git commands
+- **Commit early and often** after every meaningful unit of work. Do not accumulate changes
+- **Never use `git checkout` to restore files** — commit first, then `git revert` or `git reset --soft`
+- Feature branches merged to `develop` via PR. Do not push without being asked
+
+---
+
+## Tooling Integration
+- **Cursor/Copilot**: Follow these rules strictly. If a suggested change uses a banned library, reject it and implement it using the approved patterns.
+- **OpenTelemetry**: All services are instrumented. Ensure new background tasks or critical paths include proper activity tracking.
+- **Build Verification**: Always verify any changes you made with a successful build (`dotnet build`). Never assume any changes will not result in a broken build.
