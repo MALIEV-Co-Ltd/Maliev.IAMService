@@ -19,7 +19,7 @@ public class IAMInfrastructureSeederHostedService : IHostedService
 
     private const string PlatformOwnerRoleId = "roles.platform.owner";
     private static readonly Guid SystemPrincipalId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private static readonly Guid BootstrapAdminId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+    private static readonly Guid LegacyBootstrapAdminId = Guid.Parse("00000000-0000-0000-0000-000000000002");
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IAMInfrastructureSeederHostedService"/> class.
@@ -51,7 +51,7 @@ public class IAMInfrastructureSeederHostedService : IHostedService
             await SeedWildcardPermissionAsync(dbContext, cancellationToken);
             await SeedPlatformOwnerRoleAsync(dbContext, cancellationToken);
             await SeedSystemPrincipalAsync(dbContext, cancellationToken);
-            await SeedBootstrapAdminAsync(dbContext, cancellationToken);
+            await CleanupLegacyBootstrapAdminAsync(dbContext, cancellationToken);
 
             _logger.LogInformation("IAM infrastructure seeding completed successfully");
         }
@@ -141,39 +141,32 @@ public class IAMInfrastructureSeederHostedService : IHostedService
         await dbContext.SaveChangesAsync(ct);
     }
 
-    private async Task SeedBootstrapAdminAsync(IAMDbContext dbContext, CancellationToken ct)
+    /// <summary>
+    /// Removes the legacy seeded bootstrap admin (admin@maliev.com) that blocked real
+    /// first-user provisioning. The EmployeeCreatedConsumer and BFF bootstrap/promote
+    /// endpoint handle first-user Platform Owner grant correctly on their own.
+    /// </summary>
+    private async Task CleanupLegacyBootstrapAdminAsync(IAMDbContext dbContext, CancellationToken ct)
     {
         var existing = await dbContext.Principals
-            .FirstOrDefaultAsync(p => p.PrincipalId == BootstrapAdminId, ct);
+            .FirstOrDefaultAsync(p => p.PrincipalId == LegacyBootstrapAdminId, ct);
 
-        if (existing != null)
-        {
-            _logger.LogDebug("Bootstrap admin already exists");
+        if (existing == null)
             return;
+
+        // Remove role bindings first (FK constraint)
+        var bindings = await dbContext.PrincipalRoleBindings
+            .Where(b => b.PrincipalId == LegacyBootstrapAdminId)
+            .ToListAsync(ct);
+
+        if (bindings.Count > 0)
+        {
+            dbContext.PrincipalRoleBindings.RemoveRange(bindings);
+            _logger.LogInformation("Removing {Count} role binding(s) from legacy bootstrap admin", bindings.Count);
         }
 
-        _logger.LogInformation("Creating bootstrap admin principal");
-        dbContext.Principals.Add(new Principal
-        {
-            PrincipalId = BootstrapAdminId,
-            Email = "admin@maliev.com",
-            DisplayName = "System Admin",
-            PrincipalType = "user",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        });
-
-        dbContext.PrincipalRoleBindings.Add(new PrincipalRoleBinding
-        {
-            BindingId = Guid.NewGuid(),
-            PrincipalId = BootstrapAdminId,
-            RoleId = PlatformOwnerRoleId,
-            ResourcePath = "*",
-            GrantedAt = DateTime.UtcNow
-        });
-
+        dbContext.Principals.Remove(existing);
         await dbContext.SaveChangesAsync(ct);
-        _logger.LogInformation("Bootstrap admin principal created and bound to Platform Owner role");
+        _logger.LogInformation("Removed legacy bootstrap admin (admin@maliev.com) that was blocking first-user provisioning");
     }
 }

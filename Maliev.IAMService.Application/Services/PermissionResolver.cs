@@ -139,7 +139,24 @@ public class PermissionResolver : IPermissionResolver
             FromCache = false
         };
 
-        await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(CacheTtlMinutes), cancellationToken);
+        // ⚠ BOOTSTRAP SAFETY — do NOT cache empty permission responses.
+        //
+        // During first-login, AuthService polls ResolvePermissions every 500 ms for up to 10 s while
+        // the EmployeeCreatedConsumer provisions the Platform Owner role asynchronously over RabbitMQ.
+        //
+        // If an empty result ({Roles:[], Permissions:[]}) is cached here, every subsequent poll in that
+        // 10 s window becomes a cache hit that still returns zero permissions — even after the consumer
+        // commits the PrincipalRoleBinding and calls CacheService.RemoveAsync.  The cache clear races
+        // against the cache write; on a fresh DB the consumer typically wins only AFTER the polling
+        // window has already closed, so the user receives a JWT with no permissions and gets 403s
+        // on every downstream API call.
+        //
+        // Empty results are a transient state (bootstrap hasn't finished) and are cheap to re-query.
+        // Only cache once at least one role or permission is confirmed to exist.
+        if (roleIds.Count > 0 || allPermissions.Count > 0)
+        {
+            await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(CacheTtlMinutes), cancellationToken);
+        }
 
         return response;
     }

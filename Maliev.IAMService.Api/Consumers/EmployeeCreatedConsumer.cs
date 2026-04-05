@@ -11,8 +11,25 @@ namespace Maliev.IAMService.Api.Consumers;
 /// <summary>
 /// Consumer for EmployeeCreated events.
 /// Automatically provisions a Principal in the IAM system for new employees.
-/// Grants 'roles.iam.admin' with all permissions to the first user created to allow system bootstrapping.
+/// Grants <c>roles.platform.owner</c> (wildcard <c>*</c> permission) to the first
+/// <c>@maliev.com</c> user if no human Platform Owner exists yet (bootstrap).
 /// </summary>
+/// <remarks>
+/// First-login bootstrap flow (Google SSO):
+/// <list type="number">
+///   <item>AuthService: employee doesn't exist → calls EmployeeService, publishes EmployeeCreated event, starts polling ResolvePermissions every 500 ms for up to 10 s.</item>
+///   <item>This consumer (async, RabbitMQ): creates Principal, detects no human Platform Owner → calls BootstrapAdminRoleAsync → creates role.platform.owner with wildcard permission, binds it, clears permission cache.</item>
+///   <item>AuthService poll: once the binding is committed and cache is cleared, the next ResolvePermissions call returns roles → AuthService issues a JWT with permissions and stops polling.</item>
+///   <item>IntranetBff OnTicketReceived: calls POST /bootstrap/promote (200 if consumer hasn't finished, 400 if it has), then always re-exchanges the token so the cookie JWT reflects the current DB state.</item>
+/// </list>
+///
+/// Key invariants that must be preserved:
+/// <list type="bullet">
+///   <item><c>platformOwnerExists</c> queries MUST filter <c>PrincipalType == "user"</c> — system service principals also hold roles.platform.owner and must not count.</item>
+///   <item><c>PermissionResolver</c> must NOT cache empty permission results — see its SetAsync guard.</item>
+///   <item>IntranetBff must re-exchange token on both 200 and 400 from /bootstrap/promote.</item>
+/// </list>
+/// </remarks>
 public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
 {
     private readonly IPrincipalRepository _principalRepository;
@@ -82,7 +99,9 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
             {
                 _logger.LogInformation("Principal {PrincipalId} already exists, checking bootstrap status.", payload.PrincipalId);
 
-                // Even if the principal exists, check if bootstrap is needed (handles retries/stale state)
+                // Even if the principal exists, check if bootstrap is needed (handles retries/stale state).
+                // ⚠ Keep PrincipalType == "user" — see comment near the bottom of Consume() for why
+                //   filtering on type is required to exclude system service principals.
                 var ownerExistsForExisting = await (
                     from b in _dbContext.PrincipalRoleBindings
                     join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
@@ -125,6 +144,14 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
 
             // Grant Platform Owner to the first @maliev.com employee that logs in, if no owner exists yet.
             // Checking binding existence (not principal count) so retries and stale principals don't block bootstrap.
+            //
+            // ⚠ SYSTEM PRINCIPAL FILTER — the join on PrincipalType == "user" is NOT optional.
+            //
+            // PrincipalService auto-registers every .NET service/worker as a "system" principal and
+            // immediately grants it roles.platform.owner so services can call each other at startup.
+            // Without the PrincipalType filter, the query would find those system bindings and conclude
+            // that a human Platform Owner already exists, silently skipping bootstrap entirely.
+            // The first real user would then have zero permissions and receive 403 everywhere.
             var platformOwnerExists = await (
                 from b in _dbContext.PrincipalRoleBindings
                 join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
