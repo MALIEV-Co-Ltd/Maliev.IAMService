@@ -312,6 +312,15 @@ public class PrincipalsController : ControllerBase
 
         if (callerPrincipal != null)
         {
+            if (callerPrincipal.LinkedService == AspireTestAdminLinkedService)
+            {
+                _logger.LogInformation(
+                    "Skipped Platform Owner bootstrap promotion for Aspire automation principal {PrincipalId}.",
+                    callerPrincipal.PrincipalId);
+
+                return BadRequest(new { error = "Aspire automation principal cannot be promoted to Platform Owner." });
+            }
+
             var callerHasRole = await iamDb.PrincipalRoleBindings
                 .AnyAsync(b => b.PrincipalId == callerPrincipal.PrincipalId && b.RoleId == "roles.platform.owner", cancellationToken);
 

@@ -18,6 +18,8 @@ public class BootstrapSourceGuardTests
         Assert.Contains("AspireTestAdminSeeder", principalsSource, StringComparison.Ordinal);
         Assert.Contains("p.LinkedService != AspireTestAdminLinkedService", consumerSource, StringComparison.Ordinal);
         Assert.Contains("p.LinkedService != AspireTestAdminLinkedService", principalsSource, StringComparison.Ordinal);
+        Assert.Contains("callerPrincipal.LinkedService == AspireTestAdminLinkedService", principalsSource, StringComparison.Ordinal);
+        Assert.Contains("Aspire automation principal cannot be promoted to Platform Owner.", principalsSource, StringComparison.Ordinal);
     }
 
     private static string FindSource(params string[] segments)
