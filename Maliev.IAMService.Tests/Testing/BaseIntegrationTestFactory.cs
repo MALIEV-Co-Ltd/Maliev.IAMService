@@ -55,7 +55,6 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
     }
 
-    [Obsolete]
     public async Task InitializeAsync()
     {
         await _initLock.WaitAsync();
@@ -167,7 +166,6 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         Environment.SetEnvironmentVariable("IAM__RegistrationDelaySeconds", null);
     }
 
-    [Obsolete]
     protected override IHost CreateHost(IHostBuilder builder)
     {
         // Ensure containers are started before creating host

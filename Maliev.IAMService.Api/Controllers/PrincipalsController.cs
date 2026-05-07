@@ -23,6 +23,7 @@ namespace Maliev.IAMService.Api.Controllers;
 [Route("iam/v{version:apiVersion}/principals")]
 public class PrincipalsController : ControllerBase
 {
+    private const string AspireTestAdminLinkedService = "AspireTestAdminSeeder";
     private readonly IPrincipalService _principalService;
     private readonly ILogger<PrincipalsController> _logger;
 
@@ -264,7 +265,9 @@ public class PrincipalsController : ControllerBase
     public async Task<IActionResult> GetBootstrapStatus(CancellationToken cancellationToken)
     {
         var principals = await _principalService.GetPrincipalsAsync(cancellationToken);
-        var humanUsers = principals.Where(p => p.PrincipalType == "user").ToList();
+        var humanUsers = principals
+            .Where(p => p.PrincipalType == "user" && p.LinkedService != AspireTestAdminLinkedService)
+            .ToList();
         return Ok(new { Count = humanUsers.Count });
     }
 
@@ -310,7 +313,7 @@ public class PrincipalsController : ControllerBase
         if (callerPrincipal != null)
         {
             var callerHasRole = await iamDb.PrincipalRoleBindings
-                .AnyAsync(b => b.PrincipalId == callerPrincipal.PrincipalId && b.RoleId == "roles/platform.owner", cancellationToken);
+                .AnyAsync(b => b.PrincipalId == callerPrincipal.PrincipalId && b.RoleId == "roles.platform.owner", cancellationToken);
 
             if (callerHasRole)
             {
@@ -321,7 +324,9 @@ public class PrincipalsController : ControllerBase
         var platformOwnerExists = await (
             from b in iamDb.PrincipalRoleBindings
             join p in iamDb.Principals on b.PrincipalId equals p.PrincipalId
-            where b.RoleId == "roles/platform.owner" && p.PrincipalType == "user"
+            where b.RoleId == "roles.platform.owner" &&
+                  p.PrincipalType == "user" &&
+                  p.LinkedService != AspireTestAdminLinkedService
             select b.BindingId
         ).AnyAsync(cancellationToken);
 

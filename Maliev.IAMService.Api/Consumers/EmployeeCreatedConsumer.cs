@@ -40,6 +40,7 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
     private readonly ILogger<EmployeeCreatedConsumer> _logger;
     private readonly ICacheService _cacheService;
     private const string PlatformOwnerRoleId = "roles.platform.owner";
+    private const string AspireTestAdminLinkedService = "AspireTestAdminSeeder";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="EmployeeCreatedConsumer"/> class.
@@ -105,7 +106,9 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                 var ownerExistsForExisting = await (
                     from b in _dbContext.PrincipalRoleBindings
                     join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
-                    where b.RoleId == PlatformOwnerRoleId && p.PrincipalType == "user"
+                    where b.RoleId == PlatformOwnerRoleId &&
+                          p.PrincipalType == "user" &&
+                          p.LinkedService != AspireTestAdminLinkedService
                     select b.BindingId
                 ).AnyAsync(context.CancellationToken);
 
@@ -155,7 +158,9 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
             var platformOwnerExists = await (
                 from b in _dbContext.PrincipalRoleBindings
                 join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
-                where b.RoleId == PlatformOwnerRoleId && p.PrincipalType == "user"
+                where b.RoleId == PlatformOwnerRoleId &&
+                      p.PrincipalType == "user" &&
+                      p.LinkedService != AspireTestAdminLinkedService
                 select b.BindingId
             ).AnyAsync(context.CancellationToken);
 
