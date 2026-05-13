@@ -155,7 +155,12 @@ This service's tests cover **Tier 1 (Unit)** and **Tier 2 (Service Integration)*
 Permissions are hierarchical. A binding on `orgs/1` automatically grants access to `orgs/1/projects/100` via path matching logic in `PermissionResolver`.
 
 ### Service Authentication
-Services authenticate using JWTs generated via HMAC-SHA256 with a shared secret.
+Services authenticate using JWTs. Production and other non-development environments must use RS256 key pairs (`Jwt:PrivateKey` for signing and `Jwt:PublicKey` for validation). HMAC `Jwt:SecurityKey` is a Development/Testing fallback only.
+
+### Bootstrap Authorization
+- Keep `GET /iam/v1/principals/bootstrap/status` as the only anonymous bootstrap endpoint.
+- Role grants, revokes, role/permission/principal reads, and permission resolution/check APIs must always use `[RequirePermission]`; do not reintroduce principal-count based authorization bypasses.
+- `/iam/v1/principals/bootstrap/promote` must require an authenticated caller and must not promote Aspire automation principals.
 
 ---
 

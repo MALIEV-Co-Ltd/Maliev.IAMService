@@ -44,7 +44,7 @@ To maintain high performance and low complexity, the following are **NOT** used:
 ## ✨ Key Features
 
 - **GCP-Style Permissions**: Uses `service.resource.action` hierarchy for consistent authorization.
-- **Auto-Generated Service Account Tokens**: Services generate fresh JWT tokens on-demand using HMAC-SHA256, eliminating manual token management.
+- **Auto-Generated Service Account Tokens**: Services generate fresh JWT tokens on-demand; production uses RS256 key pairs and the HMAC fallback is local/test only.
 - **Secure Service Registration**: Protected endpoints requiring `service-account` role prevent unauthorized permission registration.
 - **Real-time Resolution**: Redis-backed resolution ensuring <10ms latency for auth checks.
 - **Dynamic Role Binding**: Assign roles to principals with optional resource scoping.
@@ -65,9 +65,9 @@ Services authenticate with IAM using **auto-generated JWT tokens**. This prevent
 
 ### Configuration
 
-Services require a shared HMAC secret key for token generation and validation.
+Production services require RSA key material for token generation and validation (`Jwt:PrivateKey` for signing and `Jwt:PublicKey` for validation). `Jwt:SecurityKey` is a Development/Testing fallback only.
 
-**Generate a secure key:**
+**Generate local fallback key:**
 
 ```bash
 # OpenSSL (Recommended)
@@ -131,10 +131,16 @@ All endpoints are prefixed with `/iam/v1/`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/check` | Verify if a principal has a specific permission |
-| POST | `/register` | Register service permissions/roles (Startup) |
-| GET | `/principals` | List and manage users/service accounts |
-| GET | `/roles` | Manage platform and service-specific roles |
+| POST | `/auth/check-permission` | Verify if a principal has a specific permission. Requires `iam.auth.check-permission`. |
+| POST | `/auth/resolve-permissions` | Resolve effective permissions. Requires `iam.auth.resolve-permissions`. |
+| POST | `/permissions/register` | Register service permissions. Requires `iam.permissions.create`. |
+| POST | `/roles/register` | Register service roles. Requires `iam.roles.create`. |
+| GET | `/principals/bootstrap/status` | Public first-user bootstrap status only. Does not expose role or binding data. |
+| GET | `/principals`, `/roles`, `/permissions` | Administrative read APIs. Require matching `iam.*.list/read` permissions. |
+
+### Bootstrap Security
+
+The only anonymous bootstrap endpoint is `GET /iam/v1/principals/bootstrap/status`. Role grants, revokes, role/permission/principal listing, and permission resolution/check APIs always require a platform bearer token plus the matching `RequirePermission` policy, even while the IAM database has zero or one principals. First-user elevation is handled through the authenticated `/principals/bootstrap/promote` flow.
 
 ---
 

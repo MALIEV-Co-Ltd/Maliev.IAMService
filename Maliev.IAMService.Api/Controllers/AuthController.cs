@@ -4,6 +4,7 @@ using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -15,6 +16,7 @@ namespace Maliev.IAMService.Api.Controllers;
 [ApiController]
 [ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/auth")]
+[Authorize]
 public class AuthController : ControllerBase
 {
     private readonly IPermissionResolver _permissionResolver;
@@ -44,12 +46,13 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Resolves all effective permissions for a principal, optionally scoped to a specific resource.
     /// Uses Redis caching with 5-minute TTL for optimal performance (target &lt;10ms).
-    /// Supports Development Bootstrap and Service Account bypass.
+    /// Requires explicit permission resolution access.
     /// </summary>
     /// <param name="request">The permission resolution request containing principal ID and optional resource scope.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of permissions granted to the principal.</returns>
     [HttpPost("resolve-permissions")]
+    [RequirePermission(IAMPermissions.AuthResolvePermissions)]
     public async Task<IActionResult> ResolvePermissions([FromBody] ResolvePermissionsRequest request, CancellationToken cancellationToken)
     {
         // 1. Service Account Bypass: Allow other services to resolve permissions for users
@@ -60,22 +63,6 @@ public class AuthController : ControllerBase
             return Ok(response);
         }
 
-        // 2. Development Bootstrap: Allow access if system has 1 or fewer users
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 3. Standard Path: Check for iam.auth.resolve-permissions permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.AuthResolvePermissions);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         var res = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
         return Ok(res);
     }
@@ -83,12 +70,13 @@ public class AuthController : ControllerBase
     /// <summary>
     /// Checks if a principal has a specific permission, optionally scoped to a resource.
     /// Includes latency tracking and supports hierarchical resource matching.
-    /// Supports Development Bootstrap and Service Account bypass.
+    /// Requires explicit permission-check access.
     /// </summary>
     /// <param name="request">The permission check request containing principal ID, permission ID, and optional resource scope.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Boolean result indicating if the permission is granted, along with latency metrics.</returns>
     [HttpPost("check-permission")]
+    [RequirePermission(IAMPermissions.AuthCheckPermission)]
     public async Task<IActionResult> CheckPermission([FromBody] CheckPermissionRequest request, CancellationToken cancellationToken)
     {
         // 1. Service Account Bypass: Allow other services to check permissions for users
@@ -97,22 +85,6 @@ public class AuthController : ControllerBase
         {
             var response = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
             return Ok(response);
-        }
-
-        // 2. Development Bootstrap: Allow access if system has 1 or fewer users
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 3. Standard Path: Check for iam.auth.check-permission permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.AuthCheckPermission);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
         }
 
         var res = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
@@ -189,6 +161,7 @@ public class AuthController : ControllerBase
     /// <returns>New JWT access token, new refresh token, and expiration details.</returns>
     [HttpPost("token/refresh")]
     [EnableRateLimiting(RateLimitPolicies.Auth)]
+    [AllowAnonymous]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken)
     {
         try
@@ -209,6 +182,7 @@ public class AuthController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>JWKS JSON containing RSA public key information.</returns>
     [HttpGet(".well-known/jwks.json")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetJwks(CancellationToken cancellationToken)
     {
         var jwks = await _tokenService.GetJwksAsync(cancellationToken);

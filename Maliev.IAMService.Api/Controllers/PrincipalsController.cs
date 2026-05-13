@@ -43,28 +43,15 @@ public class PrincipalsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Returns a list of all users and service accounts.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit principal list permission.
     /// </remarks>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Collection of principal summaries.</returns>
     [HttpGet]
+    [RequirePermission(IAMPermissions.PrincipalsList)]
     public async Task<IActionResult> GetPrincipals(CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
         var principals = await _principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.principals.list permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PrincipalsList);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         return Ok(principals);
     }
 
@@ -72,29 +59,15 @@ public class PrincipalsController : ControllerBase
     /// Retrieves a single principal by its unique identifier.
     /// </summary>
     /// <remarks>
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit principal read permission.
     /// </remarks>
     /// <param name="id">The unique identifier of the principal.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Principal details.</returns>
     [HttpGet("{id}")]
+    [RequirePermission(IAMPermissions.PrincipalsRead)]
     public async Task<IActionResult> GetPrincipalById(Guid id, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principals = await _principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.principals.read permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PrincipalsRead);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         var principal = await _principalService.GetByIdAsync(id, cancellationToken);
         if (principal == null)
         {
@@ -124,23 +97,9 @@ public class PrincipalsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Principal details.</returns>
     [HttpGet("by-email/{email}")]
+    [RequirePermission(IAMPermissions.PrincipalsRead)]
     public async Task<IActionResult> GetPrincipalByEmail(string email, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principals = await _principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.principals.read permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.PrincipalsRead);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         var principal = await _principalService.GetByEmailAsync(email, cancellationToken);
         if (principal == null)
         {
@@ -224,39 +183,6 @@ public class PrincipalsController : ControllerBase
     }
 
     /// <summary>
-    /// Grants a role to a principal.
-    /// Used by AuthService during auto-provisioning of the first @maliev.com employee
-    /// to synchronously assign the Platform Owner role before issuing the JWT.
-    /// </summary>
-    /// <param name="id">The unique identifier of the principal.</param>
-    /// <param name="request">The role grant request.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>No content on success.</returns>
-    [HttpPost("{id:guid}/roles")]
-    [RequirePermission(IAMPermissions.BindingsCreate)]
-    public async Task<IActionResult> GrantRole(Guid id, [FromBody] GrantRoleRequest request, CancellationToken cancellationToken)
-    {
-        var bindingService = HttpContext.RequestServices.GetRequiredService<IBindingService>();
-
-        try
-        {
-            await bindingService.GrantRoleAsync(id, request, IAMDbContext.SystemPrincipalId, cancellationToken);
-            _logger.LogInformation("Granted role {RoleId} to principal {PrincipalId}", request.RoleId, id);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Role binding already exists for principal {PrincipalId} and role {RoleId}. Ignoring.", id, request.RoleId);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogWarning("Principal or role not found when granting role {RoleId} to principal {PrincipalId}: {Message}", request.RoleId, id, ex.Message);
-            return NotFound(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
     /// Gets the bootstrap status of the IAM system.
     /// Returns the total count of principals. Used by BFF for first-user detection.
     /// </summary>
@@ -292,6 +218,7 @@ public class PrincipalsController : ControllerBase
     /// human user from ever gaining permissions.
     /// </remarks>
     [HttpPost("bootstrap/promote")]
+    [Authorize]
     public async Task<IActionResult> PromoteCallerToAdmin(CancellationToken cancellationToken)
     {
         var iamDb = HttpContext.RequestServices.GetRequiredService<IAMDbContext>();
@@ -328,6 +255,18 @@ public class PrincipalsController : ControllerBase
             {
                 return Ok(new { message = "Already promoted." });
             }
+        }
+
+        var humanPrincipalIds = await iamDb.Principals
+            .Where(p => p.PrincipalType == "user" && p.LinkedService != AspireTestAdminLinkedService)
+            .Select(p => p.PrincipalId)
+            .ToListAsync(cancellationToken);
+
+        if (humanPrincipalIds.Count > 1 ||
+            (humanPrincipalIds.Count == 1 &&
+             (callerPrincipal == null || humanPrincipalIds[0] != callerPrincipal.PrincipalId)))
+        {
+            return BadRequest(new { error = "System is already bootstrapped." });
         }
 
         var platformOwnerExists = await (

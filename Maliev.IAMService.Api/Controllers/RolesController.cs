@@ -3,7 +3,6 @@ using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Maliev.IAMService.Api.Controllers;
@@ -70,7 +69,7 @@ public class RolesController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Returns all roles (built-in and custom). If `serviceName` is provided, filters to roles owned by that service.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit role list access.
     /// </remarks>
     /// <param name="serviceName">Optional filter to retrieve roles for a specific service.</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
@@ -78,24 +77,9 @@ public class RolesController : ControllerBase
     /// <response code="200">Returns the requested roles.</response>
     /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     [HttpGet]
+    [RequirePermission(IAMPermissions.RolesList)]
     public async Task<IActionResult> GetRoles([FromQuery] string? serviceName, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.roles.list permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.RolesList);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         if (!string.IsNullOrWhiteSpace(serviceName))
         {
             var roles = await _roleService.GetByServiceAsync(serviceName, cancellationToken);
@@ -112,7 +96,7 @@ public class RolesController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Fetches full details including the list of associated permission identifiers.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit role read access.
     /// </remarks>
     /// <param name="roleId">The unique identifier of the role (e.g., `roles.supplier.admin`).</param>
     /// <param name="cancellationToken">Cancellation token for the asynchronous operation.</param>
@@ -121,24 +105,9 @@ public class RolesController : ControllerBase
     /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     /// <response code="404">If the role ID is not found.</response>
     [HttpGet("{**roleId}")]
+    [RequirePermission(IAMPermissions.RolesRead)]
     public async Task<IActionResult> GetRoleById(string roleId, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.roles.read permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.RolesRead);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         var role = await _roleService.GetByIdAsync(roleId, cancellationToken);
         if (role == null)
         {

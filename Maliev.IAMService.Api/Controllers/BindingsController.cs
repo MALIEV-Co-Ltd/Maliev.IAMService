@@ -1,8 +1,8 @@
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults.Authorization;
-using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Domain.Constants;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
@@ -37,7 +37,7 @@ public class BindingsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Assigns a role (and all its permissions) to a user or service account.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit binding creation permission.
     /// </remarks>
     /// <param name="principalId">The unique identifier of the principal.</param>
     /// <param name="request">Grant role request.</param>
@@ -47,29 +47,14 @@ public class BindingsController : ControllerBase
     /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     /// <response code="409">If the principal already has this role or the role doesn't exist.</response>
     [HttpPost]
+    [RequirePermission(IAMPermissions.BindingsCreate)]
     public async Task<IActionResult> GrantRole(Guid principalId, [FromBody] GrantRoleRequest request, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.bindings.create permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.BindingsCreate);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         try
         {
             // Get performedBy from authenticated user context
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-            var performedBy = userIdClaim != null ? Guid.Parse(userIdClaim) : Guid.Empty;
+            var performedBy = Guid.TryParse(userIdClaim, out var parsedUserId) ? parsedUserId : Guid.Empty;
 
             var binding = await _bindingService.GrantRoleAsync(principalId, request, performedBy, cancellationToken);
             return Ok(binding);
@@ -85,7 +70,7 @@ public class BindingsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Removes a specific role assignment. The `bindingId` is the unique ID of the assignment, not the role itself.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit binding delete permission.
     /// </remarks>
     /// <param name="principalId">The unique identifier of the principal.</param>
     /// <param name="bindingId">The unique identifier of the binding to revoke.</param>
@@ -95,29 +80,14 @@ public class BindingsController : ControllerBase
     /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     /// <response code="404">If the binding does not exist.</response>
     [HttpDelete("{bindingId}")]
+    [RequirePermission(IAMPermissions.BindingsDelete)]
     public async Task<IActionResult> RevokeRole(Guid principalId, Guid bindingId, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.bindings.delete permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.BindingsDelete);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         try
         {
             // Get performedBy from authenticated user context
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-            var performedBy = userIdClaim != null ? Guid.Parse(userIdClaim) : Guid.Empty;
+            var performedBy = Guid.TryParse(userIdClaim, out var parsedUserId) ? parsedUserId : Guid.Empty;
 
             await _bindingService.RevokeRoleAsync(principalId, bindingId, performedBy, cancellationToken);
             return NoContent();
@@ -133,7 +103,7 @@ public class BindingsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Lists all roles currently assigned to the user or service account.
-    /// Supports Development Bootstrap: allows access if system has 1 or fewer users.
+    /// Requires explicit binding list permission.
     /// </remarks>
     /// <param name="principalId">The unique identifier of the principal.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -141,24 +111,9 @@ public class BindingsController : ControllerBase
     /// <response code="200">Returns the list of bindings.</response>
     /// <response code="403">If the user lacks permission and system is already bootstrapped.</response>
     [HttpGet]
+    [RequirePermission(IAMPermissions.BindingsList)]
     public async Task<IActionResult> GetBindings(Guid principalId, CancellationToken cancellationToken)
     {
-        // 1. Development Bootstrap: Check if we should allow access regardless of permissions
-        var principalService = HttpContext.RequestServices.GetRequiredService<IPrincipalService>();
-        var principals = await principalService.GetPrincipalsAsync(cancellationToken);
-
-        if (principals.Count() > 1)
-        {
-            // 2. Standard Path: Check for iam.bindings.list permission
-            var authorizationService = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
-            var authResult = await authorizationService.AuthorizeAsync(User, null, "Permission:" + IAMPermissions.BindingsList);
-
-            if (!authResult.Succeeded)
-            {
-                return Forbid();
-            }
-        }
-
         var bindings = await _bindingService.GetBindingsAsync(principalId, cancellationToken);
         return Ok(bindings);
     }
