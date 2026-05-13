@@ -60,7 +60,7 @@ public interface ICacheService
 public class CacheService : ICacheService
 {
     private readonly IDistributedCache _cache;
-    private readonly IConnectionMultiplexer _redis;
+    private readonly IConnectionMultiplexer? _redis;
     private readonly ILogger<CacheService> _logger;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -71,13 +71,16 @@ public class CacheService : ICacheService
     /// Initializes a new instance of the <see cref="CacheService"/> class.
     /// </summary>
     /// <param name="cache">The distributed cache.</param>
-    /// <param name="redis">The Redis connection multiplexer.</param>
     /// <param name="logger">The logger.</param>
-    public CacheService(IDistributedCache cache, IConnectionMultiplexer redis, ILogger<CacheService> logger)
+    /// <param name="redis">The Redis connection multiplexer, when Redis is enabled.</param>
+    public CacheService(
+        IDistributedCache cache,
+        ILogger<CacheService> logger,
+        IConnectionMultiplexer? redis = null)
     {
         _cache = cache;
-        _redis = redis;
         _logger = logger;
+        _redis = redis;
     }
 
     /// <inheritdoc />
@@ -135,6 +138,12 @@ public class CacheService : ICacheService
     {
         try
         {
+            if (_redis == null)
+            {
+                _logger.LogDebug("Redis is not configured. Skipping prefix-based invalidation for: {Prefix}", prefix);
+                return;
+            }
+
             if (!_redis.IsConnected)
             {
                 _logger.LogWarning("Redis is not connected. Skipping prefix-based invalidation for: {Prefix}", prefix);

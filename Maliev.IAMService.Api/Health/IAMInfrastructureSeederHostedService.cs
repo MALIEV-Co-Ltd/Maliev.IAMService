@@ -48,6 +48,8 @@ public class IAMInfrastructureSeederHostedService : IHostedService
             using var scope = _serviceProvider.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<IAMDbContext>();
 
+            await dbContext.Database.MigrateAsync(cancellationToken);
+
             await SeedWildcardPermissionAsync(dbContext, cancellationToken);
             await SeedPlatformOwnerRoleAsync(dbContext, cancellationToken);
             await SeedSystemPrincipalAsync(dbContext, cancellationToken);
