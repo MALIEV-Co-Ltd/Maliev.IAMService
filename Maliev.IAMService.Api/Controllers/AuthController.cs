@@ -16,7 +16,6 @@ namespace Maliev.IAMService.Api.Controllers;
 [ApiController]
 [ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/auth")]
-[Authorize]
 public class AuthController : ControllerBase
 {
     private readonly IPermissionResolver _permissionResolver;

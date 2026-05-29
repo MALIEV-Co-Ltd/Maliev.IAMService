@@ -218,9 +218,14 @@ public class PrincipalsController : ControllerBase
     /// human user from ever gaining permissions.
     /// </remarks>
     [HttpPost("bootstrap/promote")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<IActionResult> PromoteCallerToAdmin(CancellationToken cancellationToken)
     {
+        if (User.Identity is not { IsAuthenticated: true })
+        {
+            return Unauthorized(new { error = "User is not authenticated." });
+        }
+
         var iamDb = HttpContext.RequestServices.GetRequiredService<IAMDbContext>();
 
         var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
