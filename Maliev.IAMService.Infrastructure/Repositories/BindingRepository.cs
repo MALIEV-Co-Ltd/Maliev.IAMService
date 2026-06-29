@@ -2,6 +2,7 @@ using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Maliev.IAMService.Infrastructure.Repositories;
 
@@ -39,8 +40,23 @@ public class BindingRepository : IBindingRepository
     public async Task<PrincipalRoleBinding> CreateAsync(PrincipalRoleBinding binding, CancellationToken cancellationToken = default)
     {
         _context.PrincipalRoleBindings.Add(binding);
-        await _context.SaveChangesAsync(cancellationToken);
-        return binding;
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            return binding;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Concurrent service registrations race past the ExistsAsync check and
+            // insert the same (principal, role, resource) binding. The binding is
+            // already there — treat the grant as idempotent and return it.
+            _context.Entry(binding).State = EntityState.Detached;
+            var existing = await _context.PrincipalRoleBindings.FirstOrDefaultAsync(prb =>
+                prb.PrincipalId == binding.PrincipalId &&
+                prb.RoleId == binding.RoleId &&
+                prb.ResourcePath == binding.ResourcePath, cancellationToken);
+            return existing ?? binding;
+        }
     }
 
     /// <inheritdoc/>
