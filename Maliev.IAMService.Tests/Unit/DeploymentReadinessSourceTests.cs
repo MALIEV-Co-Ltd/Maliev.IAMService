@@ -109,6 +109,7 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.Contains("--configuration Release", workflow, StringComparison.Ordinal);
         Assert.Contains("--no-build", workflow, StringComparison.Ordinal);
         Assert.Contains("--no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("package --include-transitive --vulnerable --no-restore --configfile NuGet.PRValidation.Config", workflow, StringComparison.Ordinal);
         Assert.Contains("dependency_restore_stage=restore-local", workflow, StringComparison.Ordinal);
         Assert.Contains("/iam/liveness", workflow, StringComparison.Ordinal);
         Assert.Contains("postgres:18-alpine", workflow, StringComparison.Ordinal);

@@ -140,7 +140,7 @@ jobs:
           -p:MessagingContractsVersion=1.0.91-alpha
 
       - name: Audit resolved NuGet graph
-        run: dotnet list Maliev.IAMService.slnx package --include-transitive --vulnerable --no-restore
+        run: dotnet list Maliev.IAMService.slnx package --include-transitive --vulnerable --no-restore --configfile NuGet.PRValidation.Config
 
   container:
     name: Build and scan production image
