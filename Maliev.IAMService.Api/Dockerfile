@@ -1,61 +1,70 @@
-# syntax=docker/dockerfile:1.4
-# See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
+# syntax=docker/dockerfile:1.7
 
-# This stage is used when running from VS in fast mode (Default for Debug configuration)
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
-WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
+ARG dependency_restore_stage=restore-private
 
-
-# This stage is used to build the service project
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-ARG BUILD_CONFIGURATION=Release
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build-base
+ARG SERVICE_DEFAULTS_VERSION=1.0.81-alpha
+ARG MESSAGING_CONTRACTS_VERSION=1.0.91-alpha
 WORKDIR /src
 
-# Copy nuget.config and project files
 COPY ["nuget.config", "."]
+COPY ["NuGet.PRValidation.Config", "."]
+COPY ["Directory.Build.props", "."]
 COPY ["Maliev.IAMService.Api/Maliev.IAMService.Api.csproj", "Maliev.IAMService.Api/"]
 COPY ["Maliev.IAMService.Application/Maliev.IAMService.Application.csproj", "Maliev.IAMService.Application/"]
 COPY ["Maliev.IAMService.Domain/Maliev.IAMService.Domain.csproj", "Maliev.IAMService.Domain/"]
 COPY ["Maliev.IAMService.Infrastructure/Maliev.IAMService.Infrastructure.csproj", "Maliev.IAMService.Infrastructure/"]
+COPY [".ci-packages/", ".ci-packages/"]
 
-# Restore with GitHub Packages authentication using BuildKit secrets
-RUN --mount=type=secret,id=nuget_username \
-    --mount=type=secret,id=nuget_password \
-    NUGET_USERNAME=$(cat /run/secrets/nuget_username) \
-    NUGET_PASSWORD=$(cat /run/secrets/nuget_password) \
-    dotnet restore "./Maliev.IAMService.Api/Maliev.IAMService.Api.csproj"
+FROM build-base AS restore-private
+RUN --mount=type=secret,id=nuget_username,required=true \
+    --mount=type=secret,id=nuget_password,required=true \
+    NUGET_USERNAME="$(cat /run/secrets/nuget_username)" \
+    NUGET_PASSWORD="$(cat /run/secrets/nuget_password)" \
+    dotnet restore "Maliev.IAMService.Api/Maliev.IAMService.Api.csproj" \
+      /p:GITHUB_ACTIONS=true \
+      /p:ServiceDefaultsVersion="$SERVICE_DEFAULTS_VERSION" \
+      /p:MessagingContractsVersion="$MESSAGING_CONTRACTS_VERSION"
 
+FROM build-base AS restore-local
+RUN dotnet restore "Maliev.IAMService.Api/Maliev.IAMService.Api.csproj" \
+      --configfile "NuGet.PRValidation.Config" \
+      /p:GITHUB_ACTIONS=true \
+      /p:ServiceDefaultsVersion="$SERVICE_DEFAULTS_VERSION" \
+      /p:MessagingContractsVersion="$MESSAGING_CONTRACTS_VERSION"
+
+FROM ${dependency_restore_stage} AS build
+ARG BUILD_CONFIGURATION=Release
 COPY . .
 WORKDIR "/src/Maliev.IAMService.Api"
-RUN dotnet build "./Maliev.IAMService.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "Maliev.IAMService.Api.csproj" \
+    --configuration "$BUILD_CONFIGURATION" \
+    --output /app/build \
+    --no-restore \
+    /p:GITHUB_ACTIONS=true \
+    /p:ServiceDefaultsVersion="$SERVICE_DEFAULTS_VERSION" \
+    /p:MessagingContractsVersion="$MESSAGING_CONTRACTS_VERSION"
 
-# This stage is used to publish the service project to be copied to the final stage
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Maliev.IAMService.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Maliev.IAMService.Api.csproj" \
+    --configuration "$BUILD_CONFIGURATION" \
+    --output /app/publish \
+    --no-restore \
+    /p:GITHUB_ACTIONS=true \
+    /p:ServiceDefaultsVersion="$SERVICE_DEFAULTS_VERSION" \
+    /p:MessagingContractsVersion="$MESSAGING_CONTRACTS_VERSION" \
+    /p:UseAppHost=false
 
-# This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
-FROM base AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
-
-# Ensure 'app' owns the workdir (app user already exists in ASP.NET runtime image)
-RUN chown -R app:app /app
-
-# Switch to non-root user
-USER app
-
-# Copy published application (now owned by app)
 COPY --chown=app:app --from=publish /app/publish .
 
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080
-ENV ASPNETCORE_ENVIRONMENT=Production
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/iam/liveness || exit 1
+USER app
+EXPOSE 8080
+EXPOSE 8081
+ENV ASPNETCORE_HTTP_PORTS=8080 \
+    ASPNETCORE_ENVIRONMENT=Production \
+    DOTNET_EnableDiagnostics=0
 
 ENTRYPOINT ["dotnet", "Maliev.IAMService.Api.dll"]

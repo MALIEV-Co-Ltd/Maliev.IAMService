@@ -9,10 +9,6 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <SharedLibraryVersion Condition="'$(SharedLibraryVersion)' == ''">1.0.*-*</SharedLibraryVersion>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Maliev.IAMService.Domain\Maliev.IAMService.Domain.csproj" />
   </ItemGroup>
@@ -22,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <PackageReference Include="Maliev.MessagingContracts" Version="$(SharedLibraryVersion)" />
+    <PackageReference Include="Maliev.MessagingContracts" Version="$(MessagingContractsVersion)" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' != 'true'">
@@ -30,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="$(SharedLibraryVersion)" />
+    <PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="$(ServiceDefaultsVersion)" />
   </ItemGroup>
 
   <ItemGroup>

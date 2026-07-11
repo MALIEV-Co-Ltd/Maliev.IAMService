@@ -1,8 +1,8 @@
 <Project>
-	<PropertyGroup>
-		<SharedLibraryVersion Condition="'$(SharedLibraryVersion)' == ''">1.0.*-alpha*</SharedLibraryVersion>
-		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-		<Nullable>enable</Nullable>
-	</PropertyGroup>
-
+  <PropertyGroup>
+    <ServiceDefaultsVersion Condition="'$(ServiceDefaultsVersion)' == ''">1.0.81-alpha</ServiceDefaultsVersion>
+    <MessagingContractsVersion Condition="'$(MessagingContractsVersion)' == ''">1.0.91-alpha</MessagingContractsVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 </Project>

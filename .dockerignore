@@ -28,3 +28,9 @@ README.md
 **/.specify
 **/specs
 **/.gemini
+.ci-sources/
+.ci-nuget/
+.ci-packages/*
+!.ci-packages/.keep
+!.ci-packages/*.nupkg
+!.ci-packages/SHA256SUMS.txt
