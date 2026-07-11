@@ -71,6 +71,24 @@ public sealed partial class DeploymentReadinessSourceTests
     }
 
     /// <summary>
+    /// Verifies reusable build callers grant the package permission required by the called workflow.
+    /// </summary>
+    [Theory]
+    [InlineData("ci-develop.yml")]
+    [InlineData("ci-staging.yml")]
+    [InlineData("ci-main.yml")]
+    public void ReusableBuildWorkflowCallerGrantsRequiredPermissions(string workflowName)
+    {
+        string root = FindRepoRoot();
+        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", workflowName))
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        string callerJob = ExtractWorkflowJob(workflow, "build-and-test");
+
+        Assert.Contains("uses: ./.github/workflows/_build-and-test.yml", callerJob, StringComparison.Ordinal);
+        Assert.Contains("    permissions:\n      contents: read\n      packages: read", callerJob, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Verifies untrusted pull requests reconstruct immutable packages without credentials.
     /// </summary>
     [Fact]
@@ -140,6 +158,9 @@ public sealed partial class DeploymentReadinessSourceTests
     [GeneratedRegex(@"uses:\s+[^\s@]+@(?![0-9a-f]{40}(?:\s|$))[^\s]+", RegexOptions.CultureInvariant)]
     private static partial Regex UnpinnedActionRegex();
 
+    [GeneratedRegex(@"(?m)^  [A-Za-z0-9_-]+:\n", RegexOptions.CultureInvariant)]
+    private static partial Regex WorkflowJobHeaderRegex();
+
     private static string FindRepoRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -155,5 +176,15 @@ public sealed partial class DeploymentReadinessSourceTests
         }
 
         throw new DirectoryNotFoundException("Could not locate the IAMService repository root.");
+    }
+
+    private static string ExtractWorkflowJob(string workflow, string jobName)
+    {
+        string marker = $"  {jobName}:\n";
+        int jobStart = workflow.IndexOf(marker, StringComparison.Ordinal);
+        Assert.True(jobStart >= 0, $"Workflow job '{jobName}' was not found.");
+
+        Match nextJob = WorkflowJobHeaderRegex().Match(workflow, jobStart + marker.Length);
+        return nextJob.Success ? workflow[jobStart..nextJob.Index] : workflow[jobStart..];
     }
 }
