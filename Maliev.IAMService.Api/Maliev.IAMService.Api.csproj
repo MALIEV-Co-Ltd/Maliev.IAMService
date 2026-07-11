@@ -7,7 +7,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <UserSecretsId>maliev-iamservice-api</UserSecretsId>
-    <SharedLibraryVersion Condition="'$(SharedLibraryVersion)' == ''">1.0.*-*</SharedLibraryVersion>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' != 'true'">
@@ -16,8 +15,8 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
-    <PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="$(SharedLibraryVersion)" />
-    <PackageReference Include="Maliev.MessagingContracts" Version="$(SharedLibraryVersion)" />
+    <PackageReference Include="Maliev.Aspire.ServiceDefaults" Version="$(ServiceDefaultsVersion)" />
+    <PackageReference Include="Maliev.MessagingContracts" Version="$(MessagingContractsVersion)" />
   </ItemGroup>
 
   <ItemGroup>
