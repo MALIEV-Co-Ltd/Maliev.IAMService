@@ -66,7 +66,13 @@ public class PermissionResolver : IPermissionResolver
     }
 
     /// <inheritdoc />
-    public async Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default)
+    public Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default)
+        => ResolvePermissionsCoreAsync(request, bypassCache: false, cancellationToken);
+
+    private async Task<ResolvePermissionsResponse> ResolvePermissionsCoreAsync(
+        ResolvePermissionsRequest request,
+        bool bypassCache,
+        CancellationToken cancellationToken)
     {
         Guid principalGuid;
         try
@@ -88,10 +94,13 @@ public class PermissionResolver : IPermissionResolver
 
         var cacheKey = GetCacheKey(principalGuid, request.ResourcePath);
 
-        var cached = await _cacheService.GetAsync<ResolvePermissionsResponse>(cacheKey, cancellationToken);
-        if (cached != null)
+        if (!bypassCache)
         {
-            return cached with { FromCache = true };
+            var cached = await _cacheService.GetAsync<ResolvePermissionsResponse>(cacheKey, cancellationToken);
+            if (cached != null)
+            {
+                return cached with { FromCache = true };
+            }
         }
 
         var bindings = await _bindingRepository.GetByPrincipalAsync(principalGuid, cancellationToken);
@@ -172,7 +181,7 @@ public class PermissionResolver : IPermissionResolver
             ResourcePath = request.ResourcePath
         };
 
-        var resolved = await ResolvePermissionsAsync(resolveRequest, cancellationToken);
+        var resolved = await ResolvePermissionsCoreAsync(resolveRequest, request.BypassCache, cancellationToken);
 
         var allowed = resolved.Roles.Any(r => string.Equals(r, "roles.platform.owner", StringComparison.OrdinalIgnoreCase)) ||
                       resolved.Permissions.Contains("*") ||
