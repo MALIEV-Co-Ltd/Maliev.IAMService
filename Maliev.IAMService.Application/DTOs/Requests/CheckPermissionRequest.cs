@@ -9,4 +9,6 @@ public record CheckPermissionRequest
     public required string PermissionId { get; init; }
     /// <summary>Gets or sets hierarchical resource path.</summary>
     public string? ResourcePath { get; init; }
+    /// <summary>Gets or sets whether the permission must be resolved from authoritative bindings instead of cache.</summary>
+    public bool BypassCache { get; init; }
 }
