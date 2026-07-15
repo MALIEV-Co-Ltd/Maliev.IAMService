@@ -142,6 +142,25 @@ All endpoints are prefixed with `/iam/v1/`.
 
 The only anonymous bootstrap endpoint is `GET /iam/v1/principals/bootstrap/status`. Role grants, revokes, role/permission/principal listing, and permission resolution/check APIs always require a platform bearer token plus the matching `RequirePermission` policy, even while the IAM database has zero or one principals. First-user elevation is handled through the authenticated `/principals/bootstrap/promote` flow.
 
+### Authoritative `RequireLiveCheck` Policy
+
+`RequireLiveCheck = true` on a consuming service's `RequirePermission` policy calls IAM with `bypassCache: true`. This path is reserved for revocation-sensitive authorization decisions and is not a general replacement for cached permission checks.
+
+IAM accepts a live check only after normal JWT authentication and the `iam.auth.check-permission` policy succeed, and when all service-token claims match the production contract:
+
+- `user_type=service`
+- `role=service-account`
+- `purpose=iam-registration`
+- a non-empty `service_name` present in the case-insensitive `IAM:LivePermissionChecks:AllowedServices` allowlist
+- `sub=system:service:{normalized-service-name}`, using the same lowercase and `service` removal performed by `ServiceAccountTokenProvider`
+- exactly one `X-Maliev-IAM-Live-Check-Key` header whose SHA-256 digest matches the Base64 digest injected for that service under `IAM:LivePermissionChecks:CredentialHashes`
+
+The credential is independent from the fleet JWT signing key. Inject the plaintext only into the authorized caller and the SHA-256 digest only into IAM through environment-scoped secret configuration; neither value belongs in repository appsettings. Malformed, employee, customer, unlisted, or incorrectly credentialed service identities receive a `403 application/problem+json`; IAM never downgrades a requested live check to a cached result.
+
+IAM first enforces a global per-pod concurrency cap of eight, then a 120-per-minute target-principal sliding window, then a 3,000-per-minute service sliding window by default. All queues are disabled. Concurrency rejection therefore consumes no service or target rate capacity, and a saturated target cannot drain capacity shared by other targets. Target-principal partitions are hashed, internal-only, idle-pruned, and capped at 4,096 entries per pod; target identifiers never become metric tags. Capacity exhaustion returns `429 application/problem+json` with an integer `Retry-After` header. Configure the allowlist, credential hashes, and bounds under `IAM:LivePermissionChecks`; ordinary `bypassCache: false` checks do not enter these limiters.
+
+OpenTelemetry instruments `iam.live_permission_checks`, `iam.live_permission_checks.in_flight`, and `iam.live_permission_check.duration` with only the bounded `cache_mode`, `outcome`, and allowlisted `caller_service` tags.
+
 ---
 
 ## 🏥 Health & Monitoring

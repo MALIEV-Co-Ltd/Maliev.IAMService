@@ -1,4 +1,5 @@
 using Maliev.Aspire.ServiceDefaults;
+using Maliev.IAMService.Api.Authorization;
 using Maliev.IAMService.Api.Health;
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Application.Services;
@@ -53,6 +54,23 @@ try
     builder.Services.AddScoped<IBindingService, BindingService>();
     builder.Services.AddScoped<IPermissionResolver, PermissionResolver>();
     builder.Services.AddScoped<ITokenService, TokenService>();
+    builder.Services.AddOptions<LivePermissionCheckOptions>()
+        .Bind(builder.Configuration.GetSection("IAM:LivePermissionChecks"))
+        .Validate(
+            options => options.HasCompleteCredentialCoverage(),
+            "Every live permission-check service must have one distinct Base64 SHA-256 credential verifier.")
+        .Validate(
+            options => options.ServicePermitLimit > 0
+                && options.TargetPermitLimit > 0
+                && options.WindowSeconds > 0
+                && options.SegmentsPerWindow > 0
+                && options.ConcurrencyLimit > 0
+                && options.TargetLimiterCapacity > 0
+                && options.TargetLimiterIdleMinutes > 0
+                && (long)options.TargetLimiterIdleMinutes * 60 >= options.WindowSeconds,
+            "Live permission-check limits must be positive.")
+        .ValidateOnStart();
+    builder.Services.AddSingleton<LivePermissionCheckGuard>();
 
     // ===== Authorization Infrastructure =====
     builder.Services.AddPermissionAuthorization();
