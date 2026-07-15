@@ -57,6 +57,11 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
     protected string RedisConnectionString => _redisContainer?.GetConnectionString()
         ?? throw new InvalidOperationException("The Redis test container has not been initialized.");
 
+    /// <summary>Gets the running PostgreSQL Testcontainer connection string for isolated migration tests.</summary>
+    /// <exception cref="InvalidOperationException">Thrown before the shared containers are initialized.</exception>
+    protected string PostgreSqlConnectionString => _postgresContainer?.GetConnectionString()
+        ?? throw new InvalidOperationException("The PostgreSQL test container has not been initialized.");
+
     public BaseIntegrationTestFactory()
     {
         _testRsa = RSA.Create(2048);
@@ -391,7 +396,8 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
         string userId = "test-user",
         string[]? roles = null,
         string[]? permissions = null,
-        Dictionary<string, string>? additionalClaims = null)
+        Dictionary<string, string>? additionalClaims = null,
+        IEnumerable<Claim>? repeatedClaims = null)
     {
         var claims = new List<Claim>
         {
@@ -421,6 +427,11 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
             {
                 claims.Add(new Claim(key, value));
             }
+        }
+
+        if (repeatedClaims != null)
+        {
+            claims.AddRange(repeatedClaims);
         }
 
         var rsaSecurityKey = new RsaSecurityKey(_testRsa);

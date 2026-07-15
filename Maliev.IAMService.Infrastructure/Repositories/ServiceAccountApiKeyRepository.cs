@@ -1,4 +1,5 @@
 using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Workloads;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +50,7 @@ public class ServiceAccountApiKeyRepository : IServiceAccountApiKeyRepository
     /// <inheritdoc/>
     public async Task<ServiceAccountApiKey> CreateAsync(ServiceAccountApiKey apiKey, CancellationToken cancellationToken = default)
     {
+        await EnsurePrincipalIsNotManagedWorkloadAsync(apiKey.PrincipalId, cancellationToken);
         _context.ServiceAccountApiKeys.Add(apiKey);
         await _context.SaveChangesAsync(cancellationToken);
         return apiKey;
@@ -57,6 +59,15 @@ public class ServiceAccountApiKeyRepository : IServiceAccountApiKeyRepository
     /// <inheritdoc/>
     public async Task UpdateAsync(ServiceAccountApiKey apiKey, CancellationToken cancellationToken = default)
     {
+        var persistedPrincipalId = await _context.ServiceAccountApiKeys
+            .AsNoTracking()
+            .Where(candidate => candidate.KeyId == apiKey.KeyId)
+            .Select(candidate => (Guid?)candidate.PrincipalId)
+            .SingleOrDefaultAsync(cancellationToken);
+        await EnsurePrincipalIsNotManagedWorkloadAsync(apiKey.PrincipalId, cancellationToken);
+        if (persistedPrincipalId is not null && persistedPrincipalId.Value != apiKey.PrincipalId)
+            await EnsurePrincipalIsNotManagedWorkloadAsync(persistedPrincipalId.Value, cancellationToken);
+
         _context.ServiceAccountApiKeys.Update(apiKey);
         await _context.SaveChangesAsync(cancellationToken);
     }
@@ -85,5 +96,14 @@ public class ServiceAccountApiKeyRepository : IServiceAccountApiKeyRepository
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsurePrincipalIsNotManagedWorkloadAsync(Guid principalId, CancellationToken cancellationToken)
+    {
+        var isManagedWorkload = await _context.Principals
+            .AsNoTracking()
+            .AnyAsync(principal => principal.PrincipalId == principalId && principal.WorkloadId != null, cancellationToken);
+        if (isManagedWorkload)
+            throw new ManagedWorkloadMutationException("Managed workload principals cannot receive IAM API keys.");
     }
 }

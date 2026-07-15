@@ -27,6 +27,9 @@ public sealed class WorkloadProvisioningOperation
     /// <summary>Gets or sets the provisioned principal identifier.</summary>
     public Guid PrincipalId { get; set; }
 
+    /// <summary>Gets or sets the employee principal that initiated the operation.</summary>
+    public Guid PerformedBy { get; set; }
+
     /// <summary>Gets or sets the UTC completion time.</summary>
     public DateTime CompletedAt { get; set; }
 }

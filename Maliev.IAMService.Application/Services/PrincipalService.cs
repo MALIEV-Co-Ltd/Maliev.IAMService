@@ -3,6 +3,7 @@ using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Domain.Entities;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -313,6 +314,12 @@ public class PrincipalService : IPrincipalService
     /// <inheritdoc />
     public async Task DeleteAsync(Guid principalId, CancellationToken cancellationToken = default)
     {
+        var principal = await _principalRepository.GetByIdAsync(principalId, cancellationToken);
+        if (principal?.WorkloadId is not null)
+        {
+            throw new ManagedWorkloadMutationException("Managed workload principals cannot be deleted through the generic principal API.");
+        }
+
         await _principalRepository.DeleteAsync(principalId, cancellationToken);
     }
 
@@ -382,6 +389,9 @@ public class PrincipalService : IPrincipalService
 
         if (principal.PrincipalType != "service_account")
             throw new InvalidOperationException($"Principal {principalId} is not a service account");
+
+        if (principal.WorkloadId is not null)
+            throw new ManagedWorkloadMutationException("Managed workload principals cannot receive IAM API keys.");
 
         await _apiKeyRepository.DeactivateByPrincipalIdAsync(principalId, cancellationToken);
 

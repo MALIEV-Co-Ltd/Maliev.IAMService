@@ -1,6 +1,7 @@
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -80,6 +81,12 @@ public class PrincipalRepository : IPrincipalRepository
     /// <inheritdoc/>
     public async Task UpdateAsync(Principal principal, CancellationToken cancellationToken = default)
     {
+        var persistedManagedWorkload = await _context.Principals
+            .AsNoTracking()
+            .AnyAsync(candidate => candidate.PrincipalId == principal.PrincipalId && candidate.WorkloadId != null, cancellationToken);
+        if (principal.WorkloadId is not null || persistedManagedWorkload)
+            throw new ManagedWorkloadMutationException("Managed workload principals cannot be changed through a generic repository path.");
+
         principal.UpdatedAt = DateTime.UtcNow;
         _context.Principals.Update(principal);
         await _context.SaveChangesAsync(cancellationToken);
@@ -91,6 +98,9 @@ public class PrincipalRepository : IPrincipalRepository
         var principal = await _context.Principals.FindAsync(new object[] { principalId }, cancellationToken);
         if (principal != null)
         {
+            if (principal.WorkloadId is not null)
+                throw new ManagedWorkloadMutationException("Managed workload principals cannot be deleted through a generic repository path.");
+
             _context.Principals.Remove(principal);
             await _context.SaveChangesAsync(cancellationToken);
         }

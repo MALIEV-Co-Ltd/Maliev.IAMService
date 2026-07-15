@@ -2,6 +2,7 @@ using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
+using Maliev.IAMService.Application.Workloads;
 using Maliev.MessagingContracts;
 using Maliev.MessagingContracts.Contracts.Iam;
 using MassTransit;
@@ -132,6 +133,8 @@ public class RoleService : IRoleService
             var rolesToCreate = new List<Role>();
             foreach (var roleDto in request.Roles.DistinctBy(r => r.RoleId))
             {
+                EnsureRoleIsNotWorkloadManaged(roleDto.RoleId);
+
                 if (!roleDto.RoleId.StartsWith($"roles.{request.ServiceName}."))
                 {
                     _logger.LogWarning("Skipping role {RoleId} because it does not start with roles.{ServiceName}. (GCP format required)",
@@ -222,6 +225,8 @@ public class RoleService : IRoleService
     /// <inheritdoc />
     public async Task<RoleResponse> CreateCustomRoleAsync(CreateCustomRoleRequest request, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(request.RoleId);
+
         var existing = await _roleRepository.GetByIdAsync(request.RoleId, cancellationToken);
         if (existing != null)
             throw new InvalidOperationException($"Role {request.RoleId} already exists");
@@ -268,6 +273,8 @@ public class RoleService : IRoleService
     /// <inheritdoc />
     public async Task<RoleResponse> UpdateRoleAsync(string roleId, UpdateRoleRequest request, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(roleId);
+
         var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
         if (role == null)
             throw new InvalidOperationException($"Role {roleId} not found");
@@ -348,6 +355,8 @@ public class RoleService : IRoleService
     /// <inheritdoc />
     public async Task DeleteRoleAsync(string roleId, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(roleId);
+
         var role = await _roleRepository.GetByIdAsync(roleId, cancellationToken);
         if (role == null)
             throw new InvalidOperationException($"Role {roleId} not found");
@@ -384,4 +393,12 @@ public class RoleService : IRoleService
         CreatedAt = role.CreatedAt,
         UpdatedAt = role.UpdatedAt
     };
+
+    private static void EnsureRoleIsNotWorkloadManaged(string roleId)
+    {
+        if (roleId.StartsWith("roles.workloads.", StringComparison.Ordinal))
+        {
+            throw new ManagedWorkloadMutationException("Server-owned workload roles can only be changed by workload provisioning.");
+        }
+    }
 }

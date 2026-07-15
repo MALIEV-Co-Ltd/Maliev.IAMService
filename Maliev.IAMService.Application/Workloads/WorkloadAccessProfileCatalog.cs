@@ -75,5 +75,11 @@ public sealed class WorkloadAccessProfileCatalog
         {
             throw new ArgumentException("Workload profiles cannot grant Platform Owner or wildcard authority.", nameof(profile));
         }
+
+        var expectedRoleId = $"roles.workloads.{profile.WorkloadId}.v{profile.Version}";
+        if (!string.Equals(profile.RoleId, expectedRoleId, StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"Workload profile role must be the canonical server-owned role '{expectedRoleId}'.", nameof(profile));
+        }
     }
 }

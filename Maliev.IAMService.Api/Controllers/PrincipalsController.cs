@@ -8,6 +8,7 @@ using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -178,8 +179,15 @@ public class PrincipalsController : ControllerBase
     [RequirePermission(IAMPermissions.PrincipalsDelete)]
     public async Task<IActionResult> DeletePrincipal(Guid id, CancellationToken cancellationToken)
     {
-        await _principalService.DeleteAsync(id, cancellationToken);
-        return NoContent();
+        try
+        {
+            await _principalService.DeleteAsync(id, cancellationToken);
+            return NoContent();
+        }
+        catch (ManagedWorkloadMutationException exception)
+        {
+            return Conflict(new { error = exception.Message });
+        }
     }
 
     /// <summary>

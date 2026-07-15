@@ -1,4 +1,5 @@
 using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Workloads;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,7 @@ public class RoleRepository : IRoleRepository
     /// <inheritdoc/>
     public async Task<Role> CreateAsync(Role role, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(role.RoleId);
         _context.Roles.Add(role);
         try
         {
@@ -68,6 +70,8 @@ public class RoleRepository : IRoleRepository
     {
         var roleList = roles.ToList();
         if (!roleList.Any()) return;
+        foreach (var role in roleList)
+            EnsureRoleIsNotWorkloadManaged(role.RoleId);
 
         await _context.Roles.AddRangeAsync(roleList, cancellationToken);
         try
@@ -107,6 +111,7 @@ public class RoleRepository : IRoleRepository
     /// <inheritdoc/>
     public async Task UpdateAsync(Role role, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(role.RoleId);
         role.UpdatedAt = DateTime.UtcNow;
         _context.Roles.Update(role);
         try
@@ -123,6 +128,7 @@ public class RoleRepository : IRoleRepository
     /// <inheritdoc/>
     public async Task DeleteAsync(string roleId, CancellationToken cancellationToken = default)
     {
+        EnsureRoleIsNotWorkloadManaged(roleId);
         var role = await _context.Roles.FindAsync(new object[] { roleId }, cancellationToken);
         if (role != null)
         {
@@ -149,4 +155,10 @@ public class RoleRepository : IRoleRepository
     /// <inheritdoc/>
     public Role? GetTracked(string roleId) =>
         _context.Roles.Local.FirstOrDefault(r => r.RoleId == roleId);
+
+    private static void EnsureRoleIsNotWorkloadManaged(string roleId)
+    {
+        if (roleId.StartsWith("roles.workloads.", StringComparison.Ordinal))
+            throw new ManagedWorkloadMutationException("Server-owned workload roles can only be changed by workload provisioning.");
+    }
 }

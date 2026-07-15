@@ -20,6 +20,17 @@ public sealed class WorkloadAccessProfileCatalogTests
         Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
     }
 
+    [Theory]
+    [InlineData("roles.auth.workload")]
+    [InlineData("roles.workloads.other-service.v1")]
+    [InlineData("roles.workloads.auth-service.v2")]
+    public void Constructor_NonCanonicalWorkloadRole_RejectsProfile(string roleId)
+    {
+        var profile = new WorkloadAccessProfile("auth-service", 1, roleId, ["iam.auth.resolve-permissions"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
     [Fact]
     public void Get_AuthServiceVersionOne_ReturnsExactLeastPrivilegePermissions()
     {

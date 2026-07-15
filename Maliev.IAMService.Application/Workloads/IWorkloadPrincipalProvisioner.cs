@@ -28,3 +28,13 @@ public sealed class WorkloadProvisioningConflictException : Exception
     {
     }
 }
+
+/// <summary>Signals an attempt to mutate a server-managed workload identity through a generic path.</summary>
+public sealed class ManagedWorkloadMutationException : InvalidOperationException
+{
+    /// <summary>Initializes a managed-workload mutation exception.</summary>
+    /// <param name="message">Safe conflict detail.</param>
+    public ManagedWorkloadMutationException(string message) : base(message)
+    {
+    }
+}

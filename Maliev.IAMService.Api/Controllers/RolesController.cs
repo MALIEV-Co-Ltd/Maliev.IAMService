@@ -3,6 +3,7 @@ using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Maliev.IAMService.Api.Controllers;
@@ -143,6 +144,10 @@ public class RolesController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return Conflict(new { error = ex.Message });
@@ -172,6 +177,10 @@ public class RolesController : ControllerBase
         {
             var role = await _roleService.UpdateRoleAsync(roleId, request, cancellationToken);
             return Ok(role);
+        }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -204,6 +213,10 @@ public class RolesController : ControllerBase
         {
             await _roleService.DeleteRoleAsync(roleId, cancellationToken);
             return NoContent();
+        }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
