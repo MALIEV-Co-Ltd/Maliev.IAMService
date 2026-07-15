@@ -50,6 +50,13 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
     /// </summary>
     protected virtual string DbConnectionStringName => typeof(TDbContext).Name;
 
+    /// <summary>
+    /// Gets the running Redis Testcontainer connection string for specialized integration fixtures.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown before the shared containers are initialized.</exception>
+    protected string RedisConnectionString => _redisContainer?.GetConnectionString()
+        ?? throw new InvalidOperationException("The Redis test container has not been initialized.");
+
     public BaseIntegrationTestFactory()
     {
         _testRsa = RSA.Create(2048);
