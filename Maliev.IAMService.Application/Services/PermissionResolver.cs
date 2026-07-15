@@ -166,6 +166,10 @@ public class PermissionResolver : IPermissionResolver
         {
             await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(CacheTtlMinutes), cancellationToken);
         }
+        else if (bypassCache)
+        {
+            await _cacheService.RemoveAsync(cacheKey, cancellationToken);
+        }
 
         return response;
     }
