@@ -17,8 +17,8 @@ public sealed partial class DeploymentReadinessSourceTests
         string buildProps = File.ReadAllText(Path.Combine(root, "Directory.Build.props"));
         string dockerfile = File.ReadAllText(Path.Combine(root, "Maliev.IAMService.Api", "Dockerfile"));
 
-        Assert.Contains("<ServiceDefaultsVersion Condition=\"'$(ServiceDefaultsVersion)' == ''\">1.0.81-alpha</ServiceDefaultsVersion>", buildProps, StringComparison.Ordinal);
-        Assert.Contains("<MessagingContractsVersion Condition=\"'$(MessagingContractsVersion)' == ''\">1.0.91-alpha</MessagingContractsVersion>", buildProps, StringComparison.Ordinal);
+        Assert.Contains("<ServiceDefaultsVersion Condition=\"'$(ServiceDefaultsVersion)' == ''\">1.0.86-alpha</ServiceDefaultsVersion>", buildProps, StringComparison.Ordinal);
+        Assert.Contains("<MessagingContractsVersion Condition=\"'$(MessagingContractsVersion)' == ''\">1.0.94-alpha</MessagingContractsVersion>", buildProps, StringComparison.Ordinal);
         Assert.DoesNotContain("<SharedLibraryVersion", buildProps, StringComparison.Ordinal);
         Assert.DoesNotContain("1.0.*", buildProps, StringComparison.Ordinal);
 
@@ -49,8 +49,8 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.Contains("FROM build-base AS restore-local", dockerfile, StringComparison.Ordinal);
         Assert.Contains("--configfile \"NuGet.PRValidation.Config\"", dockerfile, StringComparison.Ordinal);
         Assert.Contains("/p:GITHUB_ACTIONS=true", dockerfile, StringComparison.Ordinal);
-        Assert.Contains("ARG SERVICE_DEFAULTS_VERSION=1.0.81-alpha", dockerfile, StringComparison.Ordinal);
-        Assert.Contains("ARG MESSAGING_CONTRACTS_VERSION=1.0.91-alpha", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("ARG SERVICE_DEFAULTS_VERSION=1.0.86-alpha", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("ARG MESSAGING_CONTRACTS_VERSION=1.0.94-alpha", dockerfile, StringComparison.Ordinal);
         Assert.Contains("/p:ServiceDefaultsVersion=\"$SERVICE_DEFAULTS_VERSION\"", dockerfile, StringComparison.Ordinal);
         Assert.Contains("/p:MessagingContractsVersion=\"$MESSAGING_CONTRACTS_VERSION\"", dockerfile, StringComparison.Ordinal);
         Assert.Contains("id=nuget_username,required=true", dockerfile, StringComparison.Ordinal);
@@ -62,8 +62,8 @@ public sealed partial class DeploymentReadinessSourceTests
         {
             string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", workflowName));
             Assert.Contains("uses: ./.github/workflows/_build-and-test.yml", workflow, StringComparison.Ordinal);
-            Assert.Contains("-p:ServiceDefaultsVersion=1.0.81-alpha", workflow, StringComparison.Ordinal);
-            Assert.Contains("-p:MessagingContractsVersion=1.0.91-alpha", workflow, StringComparison.Ordinal);
+            Assert.Contains("-p:ServiceDefaultsVersion=1.0.86-alpha", workflow, StringComparison.Ordinal);
+            Assert.Contains("-p:MessagingContractsVersion=1.0.94-alpha", workflow, StringComparison.Ordinal);
             Assert.Contains("needs: build-and-test", workflow, StringComparison.Ordinal);
             Assert.DoesNotContain("sed -i", workflow, StringComparison.Ordinal);
             Assert.DoesNotContain("1.0.*", workflow, StringComparison.Ordinal);
@@ -114,8 +114,8 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
         Assert.Contains("NUGET_PACKAGES: ${{ github.workspace }}/.ci-nuget/packages", workflow, StringComparison.Ordinal);
 
-        Assert.Contains("ref: 0bcd4c704d842211c5ff9bd6b9c4b3aacfcbd8e7", workflow, StringComparison.Ordinal);
-        Assert.Contains("ref: 7121d57705fc1eff6c7ebb6a69e33e9c26ebfccc", workflow, StringComparison.Ordinal);
+        Assert.Contains("ref: 71d11dc093fb34ab41263d395c45629203cdbf18", workflow, StringComparison.Ordinal);
+        Assert.Contains("ref: fb457bde0f3a0e5a01f767c88b942b2ccb8d7c61", workflow, StringComparison.Ordinal);
         Assert.Contains("include-hidden-files: true", workflow, StringComparison.Ordinal);
         Assert.Contains("overwrite: true", workflow, StringComparison.Ordinal);
         Assert.Contains("github.run_attempt", workflow, StringComparison.Ordinal);
@@ -138,10 +138,10 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.DoesNotContain("kubectl", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(UnpinnedActionRegex().Matches(workflow).Select(match => match.Value));
 
-        Assert.Contains("readonly messaging_commit=\"0bcd4c704d842211c5ff9bd6b9c4b3aacfcbd8e7\"", packageScript, StringComparison.Ordinal);
-        Assert.Contains("readonly aspire_commit=\"7121d57705fc1eff6c7ebb6a69e33e9c26ebfccc\"", packageScript, StringComparison.Ordinal);
-        Assert.Contains("readonly messaging_version=\"1.0.91-alpha\"", packageScript, StringComparison.Ordinal);
-        Assert.Contains("readonly service_defaults_version=\"1.0.81-alpha\"", packageScript, StringComparison.Ordinal);
+        Assert.Contains("readonly messaging_commit=\"71d11dc093fb34ab41263d395c45629203cdbf18\"", packageScript, StringComparison.Ordinal);
+        Assert.Contains("readonly aspire_commit=\"fb457bde0f3a0e5a01f767c88b942b2ccb8d7c61\"", packageScript, StringComparison.Ordinal);
+        Assert.Contains("readonly messaging_version=\"1.0.94-alpha\"", packageScript, StringComparison.Ordinal);
+        Assert.Contains("readonly service_defaults_version=\"1.0.86-alpha\"", packageScript, StringComparison.Ordinal);
         Assert.Contains("dotnet restore \"$generator_project\" --configfile \"$ci_nuget_config\"", packageScript, StringComparison.Ordinal);
         Assert.Contains("--configuration Release --no-restore", packageScript, StringComparison.Ordinal);
         Assert.Contains("SHA256SUMS.txt", packageScript, StringComparison.Ordinal);

@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
-    <ServiceDefaultsVersion Condition="'$(ServiceDefaultsVersion)' == ''">1.0.81-alpha</ServiceDefaultsVersion>
-    <MessagingContractsVersion Condition="'$(MessagingContractsVersion)' == ''">1.0.91-alpha</MessagingContractsVersion>
+    <ServiceDefaultsVersion Condition="'$(ServiceDefaultsVersion)' == ''">1.0.86-alpha</ServiceDefaultsVersion>
+    <MessagingContractsVersion Condition="'$(MessagingContractsVersion)' == ''">1.0.94-alpha</MessagingContractsVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Nullable>enable</Nullable>
   </PropertyGroup>

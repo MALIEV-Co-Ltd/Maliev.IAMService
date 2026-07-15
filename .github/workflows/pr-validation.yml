@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           repository: MALIEV-Co-Ltd/Maliev.MessagingContracts
-          ref: 0bcd4c704d842211c5ff9bd6b9c4b3aacfcbd8e7
+          ref: 71d11dc093fb34ab41263d395c45629203cdbf18
           path: .ci-sources/Maliev.MessagingContracts
           persist-credentials: false
 
@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           repository: MALIEV-Co-Ltd/Maliev.Aspire
-          ref: 7121d57705fc1eff6c7ebb6a69e33e9c26ebfccc
+          ref: fb457bde0f3a0e5a01f767c88b942b2ccb8d7c61
           path: .ci-sources/Maliev.Aspire
           persist-credentials: false
 
@@ -113,8 +113,8 @@ jobs:
           dotnet restore Maliev.IAMService.slnx
           --configfile NuGet.PRValidation.Config
           -p:GITHUB_ACTIONS=true
-          -p:ServiceDefaultsVersion=1.0.81-alpha
-          -p:MessagingContractsVersion=1.0.91-alpha
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
 
       - name: Record resolved package graph
         run: dotnet list Maliev.IAMService.slnx package --include-transitive --no-restore
@@ -125,8 +125,8 @@ jobs:
           --configuration Release
           --no-restore
           -p:GITHUB_ACTIONS=true
-          -p:ServiceDefaultsVersion=1.0.81-alpha
-          -p:MessagingContractsVersion=1.0.91-alpha
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
 
       - name: Test
         run: >-
@@ -136,8 +136,8 @@ jobs:
           --no-restore
           --verbosity normal
           -p:GITHUB_ACTIONS=true
-          -p:ServiceDefaultsVersion=1.0.81-alpha
-          -p:MessagingContractsVersion=1.0.91-alpha
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
 
       - name: Audit resolved NuGet graph
         run: dotnet list Maliev.IAMService.slnx package --include-transitive --vulnerable --no-restore --configfile NuGet.PRValidation.Config
