@@ -94,6 +94,10 @@ public class CacheService : ICacheService
 
             return JsonSerializer.Deserialize<T>(data, _jsonOptions);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Cache get failed for key {CacheKey}", key);
@@ -114,6 +118,10 @@ public class CacheService : ICacheService
 
             await _cache.SetStringAsync(key, data, options, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Cache set failed for key {CacheKey}", key);
@@ -127,6 +135,10 @@ public class CacheService : ICacheService
         {
             await _cache.RemoveAsync(key, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Cache remove failed for key {CacheKey}", key);
@@ -138,6 +150,8 @@ public class CacheService : ICacheService
     {
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (_redis == null)
             {
                 _logger.LogDebug("Redis is not configured. Skipping prefix-based invalidation for: {Prefix}", prefix);
@@ -171,6 +185,10 @@ public class CacheService : ICacheService
                 await Task.WhenAll(tasks);
                 _logger.LogInformation("Successfully invalidated {Count} cache keys with prefix pattern: {Prefix}", tasks.Count, redisPattern);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
