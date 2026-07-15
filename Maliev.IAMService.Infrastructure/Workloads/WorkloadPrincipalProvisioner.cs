@@ -75,19 +75,38 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         string requestHash,
         CancellationToken cancellationToken)
     {
+        _dbContext.ChangeTracker.Clear();
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "LOCK TABLE principals IN SHARE ROW EXCLUSIVE MODE",
+            cancellationToken);
+
+        var actor = await _dbContext.Principals
+            .AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.PrincipalId == performedBy, cancellationToken);
+        if (actor is null || !actor.IsActive || !string.Equals(actor.PrincipalType, "user", StringComparison.Ordinal))
+        {
+            throw new WorkloadProvisioningConflictException("Provisioning requires an active employee IAM principal.");
+        }
+
         var priorOperation = await _dbContext.WorkloadProvisioningOperations
             .AsNoTracking()
             .SingleOrDefaultAsync(candidate => candidate.OperationId == request.OperationId, cancellationToken);
         if (priorOperation is not null)
         {
-            if (!CryptographicOperations.FixedTimeEquals(
+            if (priorOperation.PerformedBy != performedBy ||
+                !CryptographicOperations.FixedTimeEquals(
                     Convert.FromHexString(priorOperation.RequestHash),
                     Convert.FromHexString(requestHash)))
             {
                 throw new WorkloadProvisioningConflictException("The operation identifier was already used for a different request.");
             }
 
+            await ValidateExactManagedStateAsync(
+                priorOperation.PrincipalId,
+                workloadId,
+                profile,
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return CreateResponse(profile, priorOperation.PrincipalId);
         }
@@ -156,17 +175,29 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
         }
 
+        var directBindingExists = await _dbContext.PrincipalPermissionBindings
+            .AnyAsync(candidate => candidate.PrincipalId == principal.PrincipalId, cancellationToken);
+        if (directBindingExists)
+        {
+            throw new WorkloadProvisioningConflictException(
+                "Managed workload principals cannot have direct permission bindings, including expired bindings.");
+        }
+
+        if (await _dbContext.ServiceAccountApiKeys
+                .AnyAsync(candidate => candidate.PrincipalId == principal.PrincipalId, cancellationToken))
+        {
+            throw new WorkloadProvisioningConflictException("Managed workload principals cannot have IAM API keys.");
+        }
+
         var bindings = await _dbContext.PrincipalRoleBindings
             .Where(candidate => candidate.PrincipalId == principal.PrincipalId)
             .ToListAsync(cancellationToken);
-        if (bindings.Any(binding => binding.RoleId == "roles.platform.owner" || binding.ResourcePath is not null))
+        if (bindings.Count > 1 || bindings.Any(binding =>
+                binding.RoleId != profile.RoleId ||
+                binding.ResourcePath is not null ||
+                binding.ExpiresAt is not null))
         {
-            throw new WorkloadProvisioningConflictException("The workload principal has an unsafe or scoped role binding.");
-        }
-
-        if (bindings.Any(binding => binding.RoleId != profile.RoleId))
-        {
-            throw new WorkloadProvisioningConflictException("The workload principal has authority outside its declared profile.");
+            throw new WorkloadProvisioningConflictException("The workload principal has authority outside its exact declared profile.");
         }
 
         if (bindings.Count == 0)
@@ -188,6 +219,7 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             ProfileVersion = request.ProfileVersion,
             RequestHash = requestHash,
             PrincipalId = principal.PrincipalId,
+            PerformedBy = performedBy,
             CompletedAt = DateTime.UtcNow
         });
         _dbContext.IAMAuditLogs.Add(new IAMAuditLog
@@ -211,6 +243,63 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         if (profile.RoleId == "roles.platform.owner" || profile.Permissions.Any(permission => permission.Contains('*', StringComparison.Ordinal)))
         {
             throw new WorkloadProvisioningConflictException("Unsafe workload profiles cannot be provisioned.");
+        }
+    }
+
+    private async Task ValidateExactManagedStateAsync(
+        Guid principalId,
+        string workloadId,
+        WorkloadAccessProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var principal = await _dbContext.Principals
+            .AsNoTracking()
+            .SingleOrDefaultAsync(candidate => candidate.PrincipalId == principalId, cancellationToken);
+        if (principal is null ||
+            !principal.IsActive ||
+            !string.Equals(principal.PrincipalType, "service_account", StringComparison.Ordinal) ||
+            !string.Equals(principal.WorkloadId, workloadId, StringComparison.Ordinal))
+        {
+            throw new WorkloadProvisioningConflictException("The recorded workload principal is missing, inactive, or has immutable identity drift.");
+        }
+
+        var rolePermissions = await _dbContext.Roles
+            .AsNoTracking()
+            .Where(role => role.RoleId == profile.RoleId)
+            .SelectMany(role => role.RolePermissions.Select(permission => permission.PermissionId))
+            .OrderBy(permission => permission)
+            .ToListAsync(cancellationToken);
+        if (!rolePermissions.SequenceEqual(profile.Permissions.Order()))
+        {
+            throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
+        }
+
+        var bindings = await _dbContext.PrincipalRoleBindings
+            .AsNoTracking()
+            .Where(binding => binding.PrincipalId == principalId)
+            .ToListAsync(cancellationToken);
+        if (bindings.Count != 1 ||
+            bindings[0].RoleId != profile.RoleId ||
+            bindings[0].ResourcePath is not null ||
+            bindings[0].ExpiresAt is not null)
+        {
+            throw new WorkloadProvisioningConflictException("The workload principal binding has drifted from its exact declared profile.");
+        }
+
+        if (await _dbContext.PrincipalPermissionBindings
+                .AsNoTracking()
+                .AnyAsync(binding => binding.PrincipalId == principalId, cancellationToken))
+        {
+            throw new WorkloadProvisioningConflictException(
+                "Managed workload principals cannot have direct permission bindings, including expired bindings.");
+        }
+
+
+        if (await _dbContext.ServiceAccountApiKeys
+                .AsNoTracking()
+                .AnyAsync(key => key.PrincipalId == principalId, cancellationToken))
+        {
+            throw new WorkloadProvisioningConflictException("Managed workload principals cannot have IAM API keys.");
         }
     }
 

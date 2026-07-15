@@ -5,6 +5,7 @@ using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Domain.Constants;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Maliev.IAMService.Application.Workloads;
 
 namespace Maliev.IAMService.Api.Controllers;
 
@@ -59,6 +60,10 @@ public class BindingsController : ControllerBase
             var binding = await _bindingService.GrantRoleAsync(principalId, request, performedBy, cancellationToken);
             return Ok(binding);
         }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return Conflict(new { error = ex.Message });
@@ -91,6 +96,10 @@ public class BindingsController : ControllerBase
 
             await _bindingService.RevokeRoleAsync(principalId, bindingId, performedBy, cancellationToken);
             return NoContent();
+        }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

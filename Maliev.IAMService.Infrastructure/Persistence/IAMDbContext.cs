@@ -155,6 +155,21 @@ public class IAMDbContext : DbContext
         modelBuilder.Entity<WorkloadProvisioningOperation>()
             .HasIndex(operation => new { operation.WorkloadId, operation.ProfileVersion });
 
+        modelBuilder.Entity<WorkloadProvisioningOperation>()
+            .HasIndex(operation => operation.PerformedBy);
+
+        modelBuilder.Entity<WorkloadProvisioningOperation>()
+            .HasOne<Principal>()
+            .WithMany()
+            .HasForeignKey(operation => operation.PrincipalId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<WorkloadProvisioningOperation>()
+            .HasOne<Principal>()
+            .WithMany()
+            .HasForeignKey(operation => operation.PerformedBy)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<Principal>()
             .ToTable(t =>
             {

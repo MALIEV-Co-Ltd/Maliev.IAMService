@@ -4,6 +4,7 @@ using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Services;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Maliev.IAMService.Api.Controllers;
@@ -78,6 +79,10 @@ public class ServiceAccountsController : ControllerBase
         {
             var response = await _principalService.RotateApiKeyAsync(principalId, cancellationToken);
             return Ok(response);
+        }
+        catch (ManagedWorkloadMutationException ex)
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

@@ -3,12 +3,36 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Maliev.Aspire.ServiceDefaults.Authorization;
+using System.Security.Claims;
 
 namespace Maliev.IAMService.Tests.Testing;
 
 public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAMDbContext>
 {
+    private static readonly string[] AllPermissions =
+    [
+        "iam.principals.create", "iam.principals.read", "iam.principals.update",
+        "iam.principals.delete", "iam.principals.list", "iam.principals.get",
+        "iam.roles.create", "iam.roles.read", "iam.roles.update",
+        "iam.roles.delete", "iam.roles.list", "iam.roles.register",
+        "iam.permissions.create", "iam.permissions.read", "iam.permissions.update",
+        "iam.permissions.delete", "iam.permissions.list", "iam.permissions.register",
+        "iam.permissions.check", "iam.permissions.batch-check", "iam.permissions.effective",
+        "iam.bindings.create", "iam.bindings.read", "iam.bindings.delete",
+        "iam.bindings.list", "iam.bindings.grant", "iam.bindings.revoke",
+        "iam.auth.resolve-permissions", "iam.auth.check-permission",
+        "iam.auth.issue-token", "iam.auth.refresh-token",
+        "iam.tokens.issue", "iam.tokens.refresh",
+        "iam.service-accounts.create", "iam.service-accounts.generate-key",
+        "iam.service-accounts.revoke-key", "iam.service-accounts.rotate-key",
+        "iam.audit.read", "iam.audit.list", "iam.audit.view",
+        "iam.workload-principals.provision"
+    ];
+
     protected override string DbConnectionStringName => "IamDbContext";
+
+    /// <summary>Gets the PostgreSQL connection string for isolated schema migration tests.</summary>
+    public string MigrationTestConnectionString => PostgreSqlConnectionString;
 
     protected override void ConfigureAdditionalServices(IServiceCollection services)
     {
@@ -24,40 +48,26 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
     /// </summary>
     public HttpClient CreateAuthenticatedClientWithAllPermissions(string userId = "00000000-0000-0000-0000-000000000002")
     {
-        var allPermissions = new[]
-        {
-            // Principals
-            "iam.principals.create", "iam.principals.read", "iam.principals.update",
-            "iam.principals.delete", "iam.principals.list", "iam.principals.get",
-            // Roles
-            "iam.roles.create", "iam.roles.read", "iam.roles.update",
-            "iam.roles.delete", "iam.roles.list", "iam.roles.register",
-            // Permissions
-            "iam.permissions.create", "iam.permissions.read", "iam.permissions.update",
-            "iam.permissions.delete", "iam.permissions.list", "iam.permissions.register",
-            "iam.permissions.check", "iam.permissions.batch-check", "iam.permissions.effective",
-            // Bindings
-            "iam.bindings.create", "iam.bindings.read", "iam.bindings.delete",
-            "iam.bindings.list", "iam.bindings.grant", "iam.bindings.revoke",
-            // Auth
-            "iam.auth.resolve-permissions", "iam.auth.check-permission",
-            "iam.auth.issue-token", "iam.auth.refresh-token",
-            "iam.tokens.issue", "iam.tokens.refresh",
-            // Service Accounts
-            "iam.service-accounts.create", "iam.service-accounts.generate-key",
-            "iam.service-accounts.revoke-key", "iam.service-accounts.rotate-key",
-            // Audit
-            "iam.audit.read", "iam.audit.list", "iam.audit.view"
-            , "iam.workload-principals.provision"
-        };
-
-        var token = CreateTestJwtToken(
-            userId,
-            roles: ["employee"],
-            permissions: allPermissions,
-            additionalClaims: new Dictionary<string, string> { ["user_type"] = "employee" });
+        var token = CreateTestJwtToken(userId, roles: ["service-account"], permissions: AllPermissions);
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        return client;
+    }
+
+    /// <summary>Creates an explicit employee administrator client for employee-only IAM operations.</summary>
+    /// <param name="principalId">Canonical employee principal ID.</param>
+    /// <param name="repeatedClaims">Optional repeated claims for negative contract tests.</param>
+    /// <returns>Authenticated employee client.</returns>
+    public HttpClient CreateEmployeeAdminClient(Guid principalId, params Claim[] repeatedClaims)
+    {
+        var token = CreateTestJwtToken(
+            principalId.ToString("D"),
+            roles: ["employee"],
+            permissions: AllPermissions,
+            additionalClaims: new Dictionary<string, string> { ["user_type"] = "employee" },
+            repeatedClaims: repeatedClaims);
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 

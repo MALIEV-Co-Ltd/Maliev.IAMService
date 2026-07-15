@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Application.DTOs.Requests;
+using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Application.Workloads;
 using Maliev.IAMService.Domain.Constants;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,9 @@ namespace Maliev.IAMService.Api.Controllers;
 [ApiController]
 [ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/workload-principals")]
-public sealed class WorkloadPrincipalsController(IWorkloadPrincipalProvisioner provisioner) : ControllerBase
+public sealed class WorkloadPrincipalsController(
+    IWorkloadPrincipalProvisioner provisioner,
+    IPrincipalService principalService) : ControllerBase
 {
     /// <summary>Creates or reconciles a workload principal from a server-owned access profile.</summary>
     /// <param name="workloadId">Canonical workload identifier.</param>
@@ -25,12 +28,23 @@ public sealed class WorkloadPrincipalsController(IWorkloadPrincipalProvisioner p
         [FromBody] ProvisionWorkloadPrincipalRequest request,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(User.FindFirst("user_type")?.Value, "employee", StringComparison.Ordinal))
+        var userTypeClaims = User.FindAll("user_type").Select(claim => claim.Value).ToList();
+        if (userTypeClaims.Count != 1 || !string.Equals(userTypeClaims[0], "employee", StringComparison.Ordinal))
         {
             return Forbid();
         }
 
-        if (!Guid.TryParse(User.FindFirst("sub")?.Value, out var performedBy) || performedBy == Guid.Empty)
+        var subjectClaims = User.FindAll("sub").Select(claim => claim.Value).ToList();
+        if (subjectClaims.Count != 1 ||
+            !Guid.TryParseExact(subjectClaims[0], "D", out var performedBy) ||
+            performedBy == Guid.Empty ||
+            !string.Equals(subjectClaims[0], performedBy.ToString("D"), StringComparison.Ordinal))
+        {
+            return Forbid();
+        }
+
+        var actor = await principalService.GetByIdAsync(performedBy, cancellationToken);
+        if (actor is null || !actor.IsActive || !string.Equals(actor.PrincipalType, "user", StringComparison.Ordinal))
         {
             return Forbid();
         }

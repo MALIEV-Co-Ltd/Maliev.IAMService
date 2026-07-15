@@ -1,6 +1,7 @@
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Infrastructure.Persistence;
+using Maliev.IAMService.Application.Workloads;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -39,6 +40,10 @@ public class BindingRepository : IBindingRepository
     /// <inheritdoc/>
     public async Task<PrincipalRoleBinding> CreateAsync(PrincipalRoleBinding binding, CancellationToken cancellationToken = default)
     {
+        if (binding.RoleId.StartsWith("roles.workloads.", StringComparison.Ordinal))
+            throw new ManagedWorkloadMutationException("Server-owned workload roles can only be assigned by workload provisioning.");
+
+        await EnsurePrincipalIsNotManagedWorkloadAsync(binding.PrincipalId, cancellationToken);
         _context.PrincipalRoleBindings.Add(binding);
         try
         {
@@ -62,6 +67,11 @@ public class BindingRepository : IBindingRepository
     /// <inheritdoc/>
     public async Task<PrincipalPermissionBinding> CreateDirectPermissionAsync(PrincipalPermissionBinding binding, CancellationToken cancellationToken = default)
     {
+        var isManagedWorkload = await _context.Principals
+            .AnyAsync(principal => principal.PrincipalId == binding.PrincipalId && principal.WorkloadId != null, cancellationToken);
+        if (isManagedWorkload)
+            throw new ManagedWorkloadMutationException("Managed workload principals cannot receive direct permission bindings.");
+
         _context.PrincipalPermissionBindings.Add(binding);
         await _context.SaveChangesAsync(cancellationToken);
         return binding;
@@ -73,6 +83,7 @@ public class BindingRepository : IBindingRepository
         var binding = await _context.PrincipalRoleBindings.FindAsync(new object[] { bindingId }, cancellationToken);
         if (binding != null)
         {
+            await EnsurePrincipalIsNotManagedWorkloadAsync(binding.PrincipalId, cancellationToken);
             _context.PrincipalRoleBindings.Remove(binding);
             await _context.SaveChangesAsync(cancellationToken);
         }
@@ -87,7 +98,10 @@ public class BindingRepository : IBindingRepository
 
     /// <inheritdoc/>
     public async Task<IEnumerable<PrincipalRoleBinding>> GetExpiredBindingsAsync(CancellationToken cancellationToken = default) =>
-        await _context.PrincipalRoleBindings.Where(prb => prb.ExpiresAt != null && prb.ExpiresAt <= DateTime.UtcNow)
+        await _context.PrincipalRoleBindings.Where(prb =>
+                prb.ExpiresAt != null &&
+                prb.ExpiresAt <= DateTime.UtcNow &&
+                prb.Principal.WorkloadId == null)
             .ToListAsync(cancellationToken);
 
     /// <inheritdoc/>
@@ -96,5 +110,13 @@ public class BindingRepository : IBindingRepository
         var expiredBindings = await GetExpiredBindingsAsync(cancellationToken);
         _context.PrincipalRoleBindings.RemoveRange(expiredBindings);
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsurePrincipalIsNotManagedWorkloadAsync(Guid principalId, CancellationToken cancellationToken)
+    {
+        var isManagedWorkload = await _context.Principals
+            .AnyAsync(principal => principal.PrincipalId == principalId && principal.WorkloadId != null, cancellationToken);
+        if (isManagedWorkload)
+            throw new ManagedWorkloadMutationException("Managed workload role bindings can only be changed by workload provisioning.");
     }
 }

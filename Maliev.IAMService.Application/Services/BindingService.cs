@@ -2,6 +2,7 @@ using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Domain.Entities;
+using Maliev.IAMService.Application.Workloads;
 using Maliev.MessagingContracts;
 using Maliev.MessagingContracts.Contracts.Iam;
 using MassTransit;
@@ -99,6 +100,12 @@ public class BindingService : IBindingService
         if (principal == null)
             throw new InvalidOperationException($"Principal {principalId} not found");
 
+        if (principal.WorkloadId is not null)
+            throw new ManagedWorkloadMutationException("Managed workload role bindings can only be changed by workload provisioning.");
+
+        if (request.RoleId.StartsWith("roles.workloads.", StringComparison.Ordinal))
+            throw new ManagedWorkloadMutationException("Server-owned workload roles can only be assigned by workload provisioning.");
+
         var role = await _roleRepository.GetByIdAsync(request.RoleId, cancellationToken);
         if (role == null)
             throw new InvalidOperationException($"Role {request.RoleId} not found");
@@ -167,6 +174,10 @@ public class BindingService : IBindingService
     /// <inheritdoc />
     public async Task RevokeRoleAsync(Guid principalId, Guid bindingId, Guid performedBy, CancellationToken cancellationToken = default)
     {
+        var principal = await _principalRepository.GetByIdAsync(principalId, cancellationToken);
+        if (principal?.WorkloadId is not null)
+            throw new ManagedWorkloadMutationException("Managed workload role bindings can only be changed by workload provisioning.");
+
         var binding = await _bindingRepository.GetByIdAsync(bindingId, cancellationToken);
         if (binding == null)
             throw new InvalidOperationException($"Binding {bindingId} not found");
