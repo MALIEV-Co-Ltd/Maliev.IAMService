@@ -94,6 +94,20 @@ public class PermissionResolver : IPermissionResolver
 
         var cacheKey = GetCacheKey(principalGuid, request.ResourcePath);
 
+        var principal = await _principalService.GetByIdAsync(principalGuid, cancellationToken);
+        if (principal is null || !principal.IsActive)
+        {
+            await _cacheService.RemoveByPrefixAsync($"iam:principal:{principalGuid}:permissions", cancellationToken);
+            return new ResolvePermissionsResponse
+            {
+                PrincipalId = principalGuid,
+                Permissions = [],
+                Roles = [],
+                ResourcePath = request.ResourcePath,
+                FromCache = false
+            };
+        }
+
         if (!bypassCache)
         {
             var cached = await _cacheService.GetAsync<ResolvePermissionsResponse>(cacheKey, cancellationToken);

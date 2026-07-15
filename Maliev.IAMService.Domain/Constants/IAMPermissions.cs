@@ -17,6 +17,8 @@ public static class IAMPermissions
     public const string PrincipalsDelete = "iam.principals.delete";
     /// <summary>Permission to list principals.</summary>
     public const string PrincipalsList = "iam.principals.list";
+    /// <summary>Permission to provision server-owned workload principals.</summary>
+    public const string WorkloadPrincipalsProvision = "iam.workload-principals.provision";
 
     // Role Management
     /// <summary>Permission to create a new role.</summary>
@@ -74,7 +76,7 @@ public static class IAMPermissions
     public static readonly string[] All =
     [
         // Principals
-        PrincipalsCreate, PrincipalsRead, PrincipalsUpdate, PrincipalsDelete, PrincipalsList,
+        PrincipalsCreate, PrincipalsRead, PrincipalsUpdate, PrincipalsDelete, PrincipalsList, WorkloadPrincipalsProvision,
         // Roles
         RolesCreate, RolesRead, RolesUpdate, RolesDelete, RolesList,
         // Permissions
