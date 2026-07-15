@@ -201,6 +201,7 @@ jobs:
           network_name="iam-smoke-net-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           database_name="iam-smoke-db-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           application_name="iam-smoke-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          live_check_credential_hash="$(openssl rand 32 | openssl dgst -sha256 -binary | base64 -w0)"
 
           # shellcheck disable=SC2317 # Invoked indirectly by the EXIT trap.
           cleanup() {
@@ -237,6 +238,7 @@ jobs:
             --env Cache__RedisEnabled=false \
             --env MassTransit__UseInMemory=true \
             --env CORS__AllowedOrigins__0=http://localhost \
+            --env "IAM__LivePermissionChecks__CredentialHashes__IntranetBff=$live_check_credential_hash" \
             --env "ConnectionStrings__IamDbContext=Host=$database_name;Port=5432;Database=iam;Username=postgres;Password=iam-smoke-password" \
             "$IMAGE_TAG" >/dev/null
 

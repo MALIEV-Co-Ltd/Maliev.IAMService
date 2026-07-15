@@ -4,6 +4,7 @@ using MassTransit;
 using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -33,6 +34,8 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
     where TProgram : class
     where TDbContext : DbContext
 {
+    protected const string LiveCheckTestCredential = "integration-test-live-check-credential";
+
     private static PostgreSqlContainer? _postgresContainer;
     private static RedisContainer? _redisContainer;
     private static RabbitMqContainer? _rabbitmqContainer;
@@ -208,6 +211,8 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
                 ["CORS:AllowedOrigins:0"] = "http://localhost:3000",
                 ["CORS_ALLOWED_ORIGINS"] = "http://localhost:3000",
                 ["IAM:RegistrationDelaySeconds"] = "0",
+                ["IAM:LivePermissionChecks:CredentialHashes:IntranetBff"] = Convert.ToBase64String(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(LiveCheckTestCredential))),
                 ["RateLimiting:PermitLimit"] = "10000",
                 ["RateLimiting:auth:PermitLimit"] = "10000"
             });

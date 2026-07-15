@@ -55,4 +55,28 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         return client;
     }
+
+    /// <summary>
+    /// Creates a client whose claims match the production service-token shape used for live IAM checks.
+    /// </summary>
+    /// <param name="serviceName">Service name carried by the token.</param>
+    /// <returns>An authenticated service client with permission-check access.</returns>
+    public HttpClient CreateLivePermissionCheckServiceClient(string serviceName = "IntranetBff")
+    {
+        var canonicalSubject = $"system:service:{serviceName.ToLowerInvariant().Replace("service", string.Empty, StringComparison.Ordinal)}";
+        var token = CreateTestJwtToken(
+            canonicalSubject,
+            roles: ["service-account"],
+            permissions: ["iam.auth.check-permission"],
+            additionalClaims: new Dictionary<string, string>
+            {
+                ["service_name"] = serviceName,
+                ["user_type"] = "service",
+                ["purpose"] = "iam-registration"
+            });
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
+        client.DefaultRequestHeaders.Add("X-Maliev-IAM-Live-Check-Key", LiveCheckTestCredential);
+        return client;
+    }
 }

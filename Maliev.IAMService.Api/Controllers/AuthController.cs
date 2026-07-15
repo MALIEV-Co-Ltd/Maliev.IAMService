@@ -1,6 +1,8 @@
+using System.Globalization;
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults;
 using Maliev.Aspire.ServiceDefaults.Authorization;
+using Maliev.IAMService.Api.Authorization;
 using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.Services;
@@ -22,6 +24,7 @@ public class AuthController : ControllerBase
     private readonly ITokenService _tokenService;
     private readonly ILogger<AuthController> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly LivePermissionCheckGuard _livePermissionCheckGuard;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AuthController"/> class.
@@ -30,16 +33,19 @@ public class AuthController : ControllerBase
     /// <param name="tokenService">Service for JWT token operations.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="scopeFactory">Service scope factory for creating fresh DbContext instances.</param>
+    /// <param name="livePermissionCheckGuard">Guard for authoritative permission-check access and capacity.</param>
     public AuthController(
         IPermissionResolver permissionResolver,
         ITokenService tokenService,
         ILogger<AuthController> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        LivePermissionCheckGuard livePermissionCheckGuard)
     {
         _permissionResolver = permissionResolver;
         _tokenService = tokenService;
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _livePermissionCheckGuard = livePermissionCheckGuard;
     }
 
     /// <summary>
@@ -78,20 +84,53 @@ public class AuthController : ControllerBase
     [RequirePermission(IAMPermissions.AuthCheckPermission)]
     public async Task<IActionResult> CheckPermission([FromBody] CheckPermissionRequest request, CancellationToken cancellationToken)
     {
-        // 1. Service Account Bypass: Allow other services to check permissions for users
-        var userType = User.FindFirst("user_type")?.Value;
-        if (userType == "service")
+        IDisposable? liveCheckLease = null;
+        if (request.BypassCache)
         {
-            var response = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
-            return Ok(response);
+            var credentialValues = Request.Headers["X-Maliev-IAM-Live-Check-Key"];
+            var credential = credentialValues.Count == 1 ? credentialValues[0] : null;
+            var admission = await _livePermissionCheckGuard.AcquireAsync(
+                User,
+                request.PrincipalId,
+                credential,
+                cancellationToken);
+            if (admission.Decision == LivePermissionCheckDecision.Forbidden)
+            {
+                return CreateProblem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Live permission check forbidden",
+                    detail: "Authoritative permission checks are restricted to trusted platform services.");
+            }
+
+            if (admission.Decision == LivePermissionCheckDecision.RateLimited)
+            {
+                var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling((admission.RetryAfter ?? TimeSpan.FromSeconds(1)).TotalSeconds));
+                Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                return CreateProblem(
+                    statusCode: StatusCodes.Status429TooManyRequests,
+                    title: "Live permission check capacity exceeded",
+                    detail: "Authoritative permission-check capacity is temporarily exhausted. Retry after the indicated delay.");
+            }
+
+            liveCheckLease = admission.Lease;
         }
 
-        var res = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
+        using (liveCheckLease)
+        {
+            var res = await _permissionResolver.CheckPermissionAsync(request, cancellationToken);
 
-        _logger.LogInformation("Permission check completed in {LatencyMs}ms for principal {PrincipalId}, permission {PermissionId}, allowed: {Allowed}",
-            res.LatencyMs, request.PrincipalId, request.PermissionId, res.Allowed);
+            _logger.LogInformation("Permission check completed in {LatencyMs}ms for principal {PrincipalId}, permission {PermissionId}, allowed: {Allowed}",
+                res.LatencyMs, request.PrincipalId, request.PermissionId, res.Allowed);
 
-        return Ok(res);
+            return Ok(res);
+        }
+    }
+
+    private ObjectResult CreateProblem(int statusCode, string title, string detail)
+    {
+        var result = Problem(statusCode: statusCode, title: title, detail: detail);
+        result.ContentTypes.Add("application/problem+json");
+        return result;
     }
 
     /// <summary>
