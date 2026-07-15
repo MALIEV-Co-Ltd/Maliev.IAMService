@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
@@ -13,6 +17,96 @@ namespace Maliev.IAMService.Tests.Unit;
 /// </summary>
 public sealed class PermissionResolverTests
 {
+    /// <summary>
+    /// Aspire's camel-case live-check payload must bind the additive bypass flag at the IAM boundary.
+    /// </summary>
+    [Fact]
+    public void CheckPermissionRequest_DeserializesCamelCaseBypassCache()
+    {
+        const string json =
+            """{"principalId":"principal-123","permissionId":"project.projects.read","resourcePath":"projects/project-123","bypassCache":true}""";
+
+        var request = JsonSerializer.Deserialize<CheckPermissionRequest>(json, JsonSerializerOptions.Web);
+
+        Assert.NotNull(request);
+        Assert.Equal("principal-123", request.PrincipalId);
+        Assert.Equal("project.projects.read", request.PermissionId);
+        Assert.Equal("projects/project-123", request.ResourcePath);
+        Assert.True(request.BypassCache);
+    }
+
+    /// <summary>
+    /// An authoritative empty result must evict a stale cached grant so later standard checks also deny.
+    /// </summary>
+    [Fact]
+    public async Task CheckPermissionAsync_BypassCacheEmptyResult_EvictsStaleGrantForSubsequentChecks()
+    {
+        var principalId = Guid.NewGuid();
+        const string permissionId = "project.projects.read";
+        const string resourcePath = "projects/project-123";
+        var resourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resourcePath))).ToLowerInvariant();
+        var expectedCacheKey = $"iam:principal:{principalId}:permissions:path:{resourceHash}";
+        var bindingRepository = new Mock<IBindingRepository>();
+        bindingRepository
+            .Setup(repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        bindingRepository
+            .Setup(repository => repository.GetDirectPermissionsByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var principalService = new Mock<IPrincipalService>();
+        principalService
+            .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(principalId);
+        var staleCacheExists = true;
+        var cacheService = new Mock<ICacheService>();
+        cacheService
+            .Setup(service => service.GetAsync<ResolvePermissionsResponse>(expectedCacheKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => staleCacheExists
+                ? new ResolvePermissionsResponse
+                {
+                    PrincipalId = principalId,
+                    Permissions = [permissionId],
+                    Roles = [],
+                    ResourcePath = resourcePath,
+                    FromCache = false
+                }
+                : null);
+        cacheService
+            .Setup(service => service.RemoveAsync(expectedCacheKey, It.IsAny<CancellationToken>()))
+            .Callback(() => staleCacheExists = false)
+            .Returns(Task.CompletedTask);
+        var resolver = new PermissionResolver(
+            bindingRepository.Object,
+            principalService.Object,
+            cacheService.Object,
+            NullLogger<PermissionResolver>.Instance);
+
+        var liveResponse = await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principalId.ToString(),
+            PermissionId = permissionId,
+            ResourcePath = resourcePath,
+            BypassCache = true
+        });
+        var standardResponse = await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principalId.ToString(),
+            PermissionId = permissionId,
+            ResourcePath = resourcePath
+        });
+
+        Assert.False(liveResponse.Allowed);
+        Assert.False(liveResponse.FromCache);
+        Assert.False(standardResponse.Allowed);
+        Assert.False(standardResponse.FromCache);
+        cacheService.Verify(
+            service => service.RemoveAsync(expectedCacheKey, It.IsAny<CancellationToken>()),
+            Times.Once);
+        bindingRepository.Verify(
+            repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()),
+            Times.Exactly(2));
+    }
+
     /// <summary>
     /// A live permission check must ignore a stale Redis result and read current bindings.
     /// </summary>
