@@ -10,6 +10,7 @@ public static class IAMPermissions
     public const string PrincipalUpdate = "iam.principals.update";
     public const string PrincipalDelete = "iam.principals.delete";
     public const string PrincipalList = "iam.principals.list";
+    public const string WorkloadPrincipalProvision = "iam.workload-principals.provision";
 
     public const string RoleCreate = "iam.roles.create";
     public const string RoleRead = "iam.roles.read";
@@ -43,6 +44,7 @@ public static class IAMPermissions
         { PrincipalUpdate, "Update IAM principals" },
         { PrincipalDelete, "Delete IAM principals" },
         { PrincipalList, "List IAM principals" },
+        { WorkloadPrincipalProvision, "Provision server-owned workload principals" },
         { RoleCreate, "Create IAM roles" },
         { RoleRead, "Read IAM roles" },
         { RoleUpdate, "Update IAM roles" },

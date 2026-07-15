@@ -21,6 +21,7 @@ public static class IAMPredefinedRoles
                 IAMPermissions.PrincipalUpdate,
                 IAMPermissions.PrincipalDelete,
                 IAMPermissions.PrincipalList,
+                IAMPermissions.WorkloadPrincipalProvision,
                 IAMPermissions.RoleCreate,
                 IAMPermissions.RoleRead,
                 IAMPermissions.RoleUpdate,

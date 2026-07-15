@@ -57,6 +57,9 @@ public sealed class PermissionResolverTests
         principalService
             .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "service_account", IsActive = true });
         var staleCacheExists = true;
         var cacheService = new Mock<ICacheService>();
         cacheService
@@ -125,6 +128,9 @@ public sealed class PermissionResolverTests
         principalService
             .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "service_account", IsActive = true });
         var cacheService = new Mock<ICacheService>();
         cacheService
             .Setup(service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -159,5 +165,57 @@ public sealed class PermissionResolverTests
         bindingRepository.Verify(
             repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    /// <summary>
+    /// Inactive principals must be denied before a previously cached grant can be returned.
+    /// </summary>
+    [Fact]
+    public async Task CheckPermissionAsync_InactivePrincipal_DeniesAndEvictsCachedAuthority()
+    {
+        var principalId = Guid.NewGuid();
+        var bindingRepository = new Mock<IBindingRepository>();
+        var principalService = new Mock<IPrincipalService>();
+        principalService
+            .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "service_account", IsActive = false });
+        var cacheService = new Mock<ICacheService>();
+        cacheService
+            .Setup(service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResolvePermissionsResponse
+            {
+                PrincipalId = principalId,
+                Permissions = ["project.projects.read"],
+                Roles = [],
+                FromCache = false
+            });
+        var resolver = new PermissionResolver(
+            bindingRepository.Object,
+            principalService.Object,
+            cacheService.Object,
+            NullLogger<PermissionResolver>.Instance);
+
+        var response = await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principalId.ToString(),
+            PermissionId = "project.projects.read"
+        });
+
+        Assert.False(response.Allowed);
+        Assert.False(response.FromCache);
+        cacheService.Verify(
+            service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        cacheService.Verify(
+            service => service.RemoveByPrefixAsync(
+                $"iam:principal:{principalId}:permissions",
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        bindingRepository.Verify(
+            service => service.GetByPrincipalAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

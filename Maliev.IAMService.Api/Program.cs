@@ -5,6 +5,8 @@ using Maliev.IAMService.Application.Interfaces;
 using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Infrastructure.Persistence;
 using Maliev.IAMService.Infrastructure.Repositories;
+using Maliev.IAMService.Application.Workloads;
+using Maliev.IAMService.Infrastructure.Workloads;
 using Maliev.Aspire.ServiceDefaults.IAM;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +56,8 @@ try
     builder.Services.AddScoped<IBindingService, BindingService>();
     builder.Services.AddScoped<IPermissionResolver, PermissionResolver>();
     builder.Services.AddScoped<ITokenService, TokenService>();
+    builder.Services.AddSingleton(WorkloadAccessProfileCatalog.Default);
+    builder.Services.AddScoped<IWorkloadPrincipalProvisioner, WorkloadPrincipalProvisioner>();
     builder.Services.AddOptions<LivePermissionCheckOptions>()
         .Bind(builder.Configuration.GetSection("IAM:LivePermissionChecks"))
         .Validate(

@@ -48,9 +48,14 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
             "iam.service-accounts.revoke-key", "iam.service-accounts.rotate-key",
             // Audit
             "iam.audit.read", "iam.audit.list", "iam.audit.view"
+            , "iam.workload-principals.provision"
         };
 
-        var token = CreateTestJwtToken(userId, roles: new[] { "service-account" }, permissions: allPermissions);
+        var token = CreateTestJwtToken(
+            userId,
+            roles: ["employee"],
+            permissions: allPermissions,
+            additionalClaims: new Dictionary<string, string> { ["user_type"] = "employee" });
         var client = CreateClient();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
         return client;

@@ -63,6 +63,11 @@ public class IAMDbContext : DbContext
     public DbSet<IAMAuditLog> IAMAuditLogs { get; set; } = null!;
 
     /// <summary>
+    /// Gets or sets idempotent workload provisioning operations.
+    /// </summary>
+    public DbSet<WorkloadProvisioningOperation> WorkloadProvisioningOperations { get; set; } = null!;
+
+    /// <summary>
     /// Configures the model using the model builder.
     /// </summary>
     /// <param name="modelBuilder">The model builder instance.</param>
@@ -82,6 +87,11 @@ public class IAMDbContext : DbContext
         modelBuilder.Entity<Principal>()
             .HasIndex(p => p.Email)
             .IsUnique();
+
+        modelBuilder.Entity<Principal>()
+            .HasIndex(p => p.WorkloadId)
+            .IsUnique()
+            .HasFilter("workload_id IS NOT NULL");
 
         modelBuilder.Entity<Role>()
             .HasIndex(r => r.RoleId)
@@ -142,8 +152,17 @@ public class IAMDbContext : DbContext
         modelBuilder.Entity<IAMAuditLog>()
             .HasIndex(al => al.PerformedBy);
 
+        modelBuilder.Entity<WorkloadProvisioningOperation>()
+            .HasIndex(operation => new { operation.WorkloadId, operation.ProfileVersion });
+
         modelBuilder.Entity<Principal>()
-            .ToTable(t => t.HasCheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account', 'system')"));
+            .ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Principal_Type", "principal_type IN ('user', 'service_account', 'system')");
+                t.HasCheckConstraint(
+                    "CK_Principal_WorkloadId",
+                    "workload_id IS NULL OR workload_id ~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
+            });
 
         modelBuilder.Entity<Permission>()
             .ToTable(t => t.HasCheckConstraint("CK_Permission_Format", "permission_id = '*' OR permission_id ~ '^[a-z0-9-]+\\.[a-z0-9-]+\\.[a-z0-9-]+$'"));
@@ -155,7 +174,8 @@ public class IAMDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint("CK_AuditLog_Action",
                 @"action IN ('GRANT_ROLE', 'REVOKE_ROLE', 'CREATE_ROLE', 'UPDATE_ROLE', 'DELETE_ROLE',
                 'REGISTER_PERMISSION', 'CREATE_PRINCIPAL', 'UPDATE_PRINCIPAL', 'DEACTIVATE_PRINCIPAL',
-                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS')"));
+                'CREATE_SERVICE_ACCOUNT', 'ROTATE_KEY', 'ISSUE_TOKEN', 'RESOLVE_PERMISSIONS',
+                'PROVISION_WORKLOAD_PRINCIPAL')"));
 
         modelBuilder.Entity<RolePermission>()
             .HasOne(rp => rp.Role)

@@ -38,6 +38,13 @@ public class Principal
     public bool IsActive { get; set; } = true;
 
     /// <summary>
+    /// Gets the immutable canonical workload identifier for a provisioned workload principal.
+    /// Null for human and legacy principals.
+    /// </summary>
+    [MaxLength(100)]
+    public string? WorkloadId { get; set; }
+
+    /// <summary>
     /// Gets or sets the name of the service this principal is linked to.
     /// </summary>
     [MaxLength(100)]
