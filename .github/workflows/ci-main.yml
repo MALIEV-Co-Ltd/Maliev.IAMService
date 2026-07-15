@@ -19,7 +19,7 @@ jobs:
     uses: ./.github/workflows/_build-and-test.yml
     with:
       solution_file: Maliev.IAMService.slnx
-      extra_args: -p:ServiceDefaultsVersion=1.0.81-alpha -p:MessagingContractsVersion=1.0.91-alpha
+      extra_args: -p:ServiceDefaultsVersion=1.0.86-alpha -p:MessagingContractsVersion=1.0.94-alpha
     secrets:
       gitops_pat: ${{ secrets.GITOPS_PAT }}
 
@@ -55,8 +55,8 @@ jobs:
           docker build \
             --secret id=nuget_username,env=NUGET_USERNAME \
             --secret id=nuget_password,env=NUGET_PASSWORD \
-            --build-arg SERVICE_DEFAULTS_VERSION=1.0.81-alpha \
-            --build-arg MESSAGING_CONTRACTS_VERSION=1.0.91-alpha \
+            --build-arg SERVICE_DEFAULTS_VERSION=1.0.86-alpha \
+            --build-arg MESSAGING_CONTRACTS_VERSION=1.0.94-alpha \
             --tag "$IMAGE_TAG" \
             --file Maliev.IAMService.Api/Dockerfile .
           docker push "$IMAGE_TAG"
