@@ -21,13 +21,15 @@ public static class TokenIssuanceCapabilityAuthentication
     /// <summary>The configuration section containing public trust material.</summary>
     public const string ConfigurationSection = "IAM:TokenIssuanceCapability";
 
+    private const string ProductionIssuer = "https://auth.maliev.com";
+    private const string ProductionAudience = "https://iam.maliev.com/auth/token-issuance";
     private const string ExpectedSubject = "urn:maliev:service:auth";
     private const string ExpectedServiceName = "AuthService";
     private const string ExpectedClientId = "auth-service";
     private const string ExpectedUserType = "service";
     private const string ExpectedPurpose = "iam.permission-resolution";
     private const string ExpectedPermission = "iam.auth.resolve-permissions";
-    private const int MinimumMaximumLifetimeSeconds = 15;
+    private const int DefaultMaximumLifetimeSeconds = 30;
     private const int MaximumMaximumLifetimeSeconds = 60;
     private static readonly string[] ForbiddenAuthorityClaimTypes =
     [
@@ -40,17 +42,24 @@ public static class TokenIssuanceCapabilityAuthentication
     /// <summary>Adds the dedicated fail-closed authentication scheme and exact-claims policy.</summary>
     /// <param name="services">Application services.</param>
     /// <param name="configuration">Application configuration.</param>
+    /// <param name="environment">Host environment used to isolate test-only trust identifiers.</param>
     /// <returns>The supplied service collection.</returns>
     public static IServiceCollection AddTokenIssuanceCapabilityAuthentication(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentNullException.ThrowIfNull(environment);
 
         var section = configuration.GetSection(ConfigurationSection);
-        var issuer = ReadCanonicalHttpsIdentifier(section["Issuer"]);
-        var audience = ReadCanonicalHttpsIdentifier(section["Audience"]);
+        var issuer = environment.IsEnvironment("Testing")
+            ? ReadCanonicalHttpsIdentifier(section["Issuer"])
+            : ProductionIssuer;
+        var audience = environment.IsEnvironment("Testing")
+            ? ReadCanonicalHttpsIdentifier(section["Audience"])
+            : ProductionAudience;
         var maximumLifetimeSeconds = ReadMaximumLifetime(section["MaximumLifetimeSeconds"]);
         var signingKeys = LoadSigningKeys(section.GetSection("PublicKeys"));
 
@@ -75,8 +84,7 @@ public static class TokenIssuanceCapabilityAuthentication
                         return notBefore.HasValue &&
                             expires.HasValue &&
                             notBefore.Value <= now &&
-                            expires.Value > now &&
-                            expires.Value - notBefore.Value <= TimeSpan.FromSeconds(maximumLifetimeSeconds);
+                            expires.Value > now;
                     },
                     ValidAlgorithms = [SecurityAlgorithms.RsaSha256],
                     NameClaimType = JwtRegisteredClaimNames.Sub,
@@ -204,11 +212,18 @@ public static class TokenIssuanceCapabilityAuthentication
             : failClosedIdentifier;
     }
 
-    private static int ReadMaximumLifetime(string? configuredValue) =>
-        int.TryParse(configuredValue, NumberStyles.None, CultureInfo.InvariantCulture, out var value) &&
-        value is >= MinimumMaximumLifetimeSeconds and <= MaximumMaximumLifetimeSeconds
-            ? value
-            : 0;
+    private static int ReadMaximumLifetime(string? configuredValue)
+    {
+        if (configuredValue is null)
+        {
+            return DefaultMaximumLifetimeSeconds;
+        }
+
+        return int.TryParse(configuredValue, NumberStyles.None, CultureInfo.InvariantCulture, out var value) &&
+            value is > 0 and <= MaximumMaximumLifetimeSeconds
+                ? value
+                : 0;
+    }
 
     private static IReadOnlyDictionary<string, SecurityKey> LoadSigningKeys(IConfigurationSection section)
     {

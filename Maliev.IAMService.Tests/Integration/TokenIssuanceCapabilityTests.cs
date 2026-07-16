@@ -6,12 +6,15 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Maliev.IAMService.Tests.Testing;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Maliev.IAMService.Api.Authorization;
+using Moq;
 
 namespace Maliev.IAMService.Tests.Integration;
 
@@ -47,37 +50,98 @@ public sealed class TokenIssuanceCapabilityTests : BaseIntegrationTest
     }
 
     [Fact]
-    public void CapabilityAuthentication_InvalidMaximumLifetime_FailsClosed()
+    public async Task ResolvePermissions_NotBeforePrecedesIssuedAtAndThirtySecondLifetime_ReturnsOk()
+    {
+        var principalId = Guid.NewGuid();
+        using var client = CreateCapabilityClient(Factory.CreateTokenIssuanceCapability(principalId));
+
+        using var response = await client.PostAsJsonAsync(Route, new { PrincipalId = principalId.ToString("D") });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public void CapabilityAuthentication_ProductionTrustUsesCanonicalIssuerAndAudience()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:Issuer"] =
+                    "https://attacker.example",
+                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:Audience"] =
+                    "https://attacker.example/iam"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddTokenIssuanceCapabilityAuthentication(
+            configuration,
+            Mock.Of<IHostEnvironment>(candidate => candidate.EnvironmentName == Environments.Production));
+        using var provider = services.BuildServiceProvider();
+
+        var validationParameters = provider
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(TokenIssuanceCapabilityAuthentication.Scheme)
+            .TokenValidationParameters;
+
+        Assert.Equal("https://auth.maliev.com", validationParameters.ValidIssuer);
+        Assert.Equal("https://iam.maliev.com/auth/token-issuance", validationParameters.ValidAudience);
+    }
+
+    [Fact]
+    public async Task CapabilityAuthentication_MissingMaximumLifetime_DefaultsToThirtySeconds()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTokenIssuanceCapabilityAuthentication(
+            new ConfigurationBuilder().Build(),
+            Mock.Of<IHostEnvironment>(candidate => candidate.EnvironmentName == Environments.Production));
+        using var provider = services.BuildServiceProvider();
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        var issuedAtSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        var thirtySecondResult = await authorization.AuthorizeAsync(
+            CreateCapabilityPrincipal(issuedAtSeconds, issuedAtSeconds - 1, issuedAtSeconds + 30),
+            resource: null,
+            TokenIssuanceCapabilityAuthentication.Policy);
+        var thirtyOneSecondResult = await authorization.AuthorizeAsync(
+            CreateCapabilityPrincipal(issuedAtSeconds, issuedAtSeconds - 1, issuedAtSeconds + 31),
+            resource: null,
+            TokenIssuanceCapabilityAuthentication.Policy);
+
+        Assert.True(thirtySecondResult.Succeeded);
+        Assert.False(thirtyOneSecondResult.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("invalid")]
+    [InlineData("61")]
+    public async Task CapabilityAuthentication_InvalidMaximumLifetime_FailsClosed(string configuredMaximumLifetime)
     {
         using var signingKey = RSA.Create(2048);
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:Issuer"] =
-                    "https://auth.test.maliev.com",
-                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:Audience"] =
-                    "https://iam.test.maliev.com/auth/token-issuance",
-                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:MaximumLifetimeSeconds"] = "invalid",
+                [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:MaximumLifetimeSeconds"] =
+                    configuredMaximumLifetime,
                 [$"{TokenIssuanceCapabilityAuthentication.ConfigurationSection}:PublicKeys:test-key"] =
                     Convert.ToBase64String(signingKey.ExportSubjectPublicKeyInfo())
             })
             .Build();
         var services = new ServiceCollection();
-        services.AddTokenIssuanceCapabilityAuthentication(configuration);
+        services.AddLogging();
+        services.AddTokenIssuanceCapabilityAuthentication(
+            configuration,
+            Mock.Of<IHostEnvironment>(candidate => candidate.EnvironmentName == Environments.Production));
         using var provider = services.BuildServiceProvider();
-        var validationParameters = provider
-            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
-            .Get(TokenIssuanceCapabilityAuthentication.Scheme)
-            .TokenValidationParameters;
-        var now = DateTime.UtcNow;
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        var issuedAtSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var accepted = validationParameters.LifetimeValidator!(
-            now.AddSeconds(-1),
-            now.AddSeconds(30),
-            null!,
-            validationParameters);
+        var result = await authorization.AuthorizeAsync(
+            CreateCapabilityPrincipal(issuedAtSeconds, issuedAtSeconds - 1, issuedAtSeconds + 1),
+            resource: null,
+            TokenIssuanceCapabilityAuthentication.Policy);
 
-        Assert.False(accepted);
+        Assert.False(result.Succeeded);
     }
 
     [Fact]
@@ -326,24 +390,24 @@ public sealed class TokenIssuanceCapabilityTests : BaseIntegrationTest
         var now = DateTime.UtcNow;
         var windows = new[]
         {
-            (now.AddMinutes(-2), now.AddMinutes(-1)),
-            (now.AddMinutes(1), now.AddMinutes(2)),
-            (now.AddSeconds(-1), now.AddSeconds(61))
+            (now.AddMinutes(-2), now.AddMinutes(-1), HttpStatusCode.Unauthorized),
+            (now.AddMinutes(1), now.AddMinutes(2), HttpStatusCode.Unauthorized),
+            (now.AddSeconds(-1), now.AddSeconds(61), HttpStatusCode.Forbidden)
         };
 
-        foreach (var (notBefore, expires) in windows)
+        foreach (var (notBefore, expires, expectedStatusCode) in windows)
         {
             using var client = CreateCapabilityClient(Factory.CreateTokenIssuanceCapability(
                 principalId,
                 notBefore: notBefore,
                 expires: expires));
             using var response = await client.PostAsJsonAsync(Route, new { PrincipalId = principalId.ToString("D") });
-            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            Assert.Equal(expectedStatusCode, response.StatusCode);
         }
     }
 
     [Theory]
-    [InlineData(-59, -59, 30, (int)HttpStatusCode.Unauthorized)]
+    [InlineData(-59, -59, 30, (int)HttpStatusCode.Forbidden)]
     [InlineData(-10, -1, 30, (int)HttpStatusCode.Forbidden)]
     public async Task ResolvePermissions_OffsetIssuedAtWindow_IsRejected(
         int issuedAtOffsetSeconds,
@@ -379,5 +443,25 @@ public sealed class TokenIssuanceCapabilityTests : BaseIntegrationTest
     {
         claims.RemoveAll(claim => claim.Type == claimType);
         claims.Add(new Claim(claimType, value));
+    }
+
+    private static ClaimsPrincipal CreateCapabilityPrincipal(long issuedAt, long notBefore, long expires)
+    {
+        var identity = new ClaimsIdentity(
+        [
+            new Claim(JwtRegisteredClaimNames.Sub, "urn:maliev:service:auth"),
+            new Claim(JwtRegisteredClaimNames.Aud, "https://iam.maliev.com/auth/token-issuance"),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("D")),
+            new Claim(JwtRegisteredClaimNames.Iat, issuedAt.ToString()),
+            new Claim(JwtRegisteredClaimNames.Nbf, notBefore.ToString()),
+            new Claim(JwtRegisteredClaimNames.Exp, expires.ToString()),
+            new Claim("service_name", "AuthService"),
+            new Claim("client_id", "auth-service"),
+            new Claim("user_type", "service"),
+            new Claim("purpose", "iam.permission-resolution"),
+            new Claim("target_principal_id", Guid.NewGuid().ToString("D")),
+            new Claim("permissions", "iam.auth.resolve-permissions")
+        ], TokenIssuanceCapabilityAuthentication.Scheme);
+        return new ClaimsPrincipal(identity);
     }
 }

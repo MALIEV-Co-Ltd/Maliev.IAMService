@@ -223,7 +223,7 @@ public sealed class PermissionResolverTests
     /// Token issuance must not preserve a revoked authority from the normal permission cache.
     /// </summary>
     [Fact]
-    public async Task ResolvePermissionsForTokenIssuanceAsync_StaleGrant_ReadsAuthoritativeBindingsAndEvictsCache()
+    public async Task ResolvePermissionsForTokenIssuanceAsync_StaleGrant_ReadsAuthoritativeBindingsWithoutCacheAccess()
     {
         var principalId = Guid.NewGuid();
         var expectedCacheKey = IamPermissionCacheKeys.ForPermissions(principalId);
@@ -265,12 +265,85 @@ public sealed class PermissionResolverTests
         Assert.Empty(response.Permissions);
         Assert.Empty(response.Roles);
         Assert.False(response.FromCache);
+        Assert.Null(response.CacheUntil);
         cacheService.Verify(
             service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
         cacheService.Verify(
             service => service.RemoveAsync(expectedCacheKey, It.IsAny<CancellationToken>()),
-            Times.Once);
+            Times.Never);
+        cacheService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// A non-empty token authority result must remain isolated from Redis reads and writes.
+    /// </summary>
+    [Fact]
+    public async Task ResolvePermissionsForTokenIssuanceAsync_NonEmptyAuthority_DoesNotReadOrWriteCache()
+    {
+        var principalId = Guid.NewGuid();
+        const string roleId = "roles.workloads.auth-service.v1";
+        const string permissionId = "iam.auth.resolve-permissions";
+        var role = new Role
+        {
+            RoleId = roleId,
+            RoleName = "Auth workload",
+            RolePermissions =
+            [
+                new RolePermission { RoleId = roleId, PermissionId = permissionId }
+            ]
+        };
+        var bindingRepository = new Mock<IBindingRepository>();
+        bindingRepository
+            .Setup(repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new PrincipalRoleBinding
+                {
+                    BindingId = Guid.NewGuid(),
+                    PrincipalId = principalId,
+                    RoleId = roleId,
+                    GrantedBy = Guid.NewGuid(),
+                    Role = role
+                }
+            ]);
+        bindingRepository
+            .Setup(repository => repository.GetDirectPermissionsByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var principalService = new Mock<IPrincipalService>();
+        principalService
+            .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "service_account", IsActive = true });
+        var cacheService = new Mock<ICacheService>();
+        var resolver = new PermissionResolver(
+            bindingRepository.Object,
+            principalService.Object,
+            cacheService.Object,
+            NullLogger<PermissionResolver>.Instance);
+
+        var response = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principalId.ToString()
+        });
+
+        Assert.Equal([permissionId], response.Permissions);
+        Assert.Equal([roleId], response.Roles);
+        Assert.False(response.FromCache);
+        Assert.Null(response.CacheUntil);
+        cacheService.Verify(
+            service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        cacheService.Verify(
+            service => service.SetAsync(
+                It.IsAny<string>(),
+                It.IsAny<ResolvePermissionsResponse>(),
+                It.IsAny<TimeSpan>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+        cacheService.VerifyNoOtherCalls();
     }
 
     /// <summary>

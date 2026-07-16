@@ -77,17 +77,18 @@ public class PermissionResolver : IPermissionResolver
 
     /// <inheritdoc />
     public Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default)
-        => ResolvePermissionsCoreAsync(request, bypassCache: false, cancellationToken);
+        => ResolvePermissionsCoreAsync(request, bypassCache: false, suppressCacheWrites: false, cancellationToken);
 
     /// <inheritdoc />
     public Task<ResolvePermissionsResponse> ResolvePermissionsForTokenIssuanceAsync(
         ResolvePermissionsRequest request,
         CancellationToken cancellationToken = default)
-        => ResolvePermissionsCoreAsync(request, bypassCache: true, cancellationToken);
+        => ResolvePermissionsCoreAsync(request, bypassCache: true, suppressCacheWrites: true, cancellationToken);
 
     private async Task<ResolvePermissionsResponse> ResolvePermissionsCoreAsync(
         ResolvePermissionsRequest request,
         bool bypassCache,
+        bool suppressCacheWrites,
         CancellationToken cancellationToken)
     {
         Guid principalGuid;
@@ -113,7 +114,13 @@ public class PermissionResolver : IPermissionResolver
         var principal = await _principalService.GetByIdAsync(principalGuid, cancellationToken);
         if (principal is null || !principal.IsActive)
         {
-            await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPermissions(principalGuid), cancellationToken);
+            if (!suppressCacheWrites)
+            {
+                await _cacheService.RemoveByPrefixAsync(
+                    IamPermissionCacheKeys.ForPermissions(principalGuid),
+                    cancellationToken);
+            }
+
             return new ResolvePermissionsResponse
             {
                 PrincipalId = principalGuid,
@@ -174,7 +181,7 @@ public class PermissionResolver : IPermissionResolver
             Permissions = allPermissions.ToList(),
             Roles = roleIds,
             ResourcePath = request.ResourcePath,
-            CacheUntil = DateTime.UtcNow.AddMinutes(CacheTtlMinutes),
+            CacheUntil = suppressCacheWrites ? null : DateTime.UtcNow.AddMinutes(CacheTtlMinutes),
             FromCache = false
         };
 
@@ -192,11 +199,11 @@ public class PermissionResolver : IPermissionResolver
         //
         // Empty results are a transient state (bootstrap hasn't finished) and are cheap to re-query.
         // Only cache once at least one role or permission is confirmed to exist.
-        if (roleIds.Count > 0 || allPermissions.Count > 0)
+        if (!suppressCacheWrites && (roleIds.Count > 0 || allPermissions.Count > 0))
         {
             await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromMinutes(CacheTtlMinutes), cancellationToken);
         }
-        else if (bypassCache)
+        else if (!suppressCacheWrites && bypassCache)
         {
             await _cacheService.RemoveAsync(cacheKey, cancellationToken);
         }
@@ -215,7 +222,11 @@ public class PermissionResolver : IPermissionResolver
             ResourcePath = request.ResourcePath
         };
 
-        var resolved = await ResolvePermissionsCoreAsync(resolveRequest, request.BypassCache, cancellationToken);
+        var resolved = await ResolvePermissionsCoreAsync(
+            resolveRequest,
+            request.BypassCache,
+            suppressCacheWrites: false,
+            cancellationToken);
 
         var allowed = resolved.Roles.Any(r => string.Equals(r, "roles.platform.owner", StringComparison.OrdinalIgnoreCase)) ||
                       resolved.Permissions.Contains("*") ||

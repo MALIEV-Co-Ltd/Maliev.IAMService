@@ -43,7 +43,6 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
     {
         Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__Issuer", CapabilityIssuer);
         Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__Audience", CapabilityAudience);
-        Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__MaximumLifetimeSeconds", "60");
         Environment.SetEnvironmentVariable(
             $"IAM__TokenIssuanceCapability__PublicKeys__{CapabilityKeyId}",
             Convert.ToBase64String(CapabilitySigningKey.ExportSubjectPublicKeyInfo()));
