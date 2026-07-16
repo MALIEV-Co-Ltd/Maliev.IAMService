@@ -66,6 +66,11 @@ public sealed class WorkloadAccessProfileCatalog
             "search-service",
             1,
             "roles.workloads.search-service.v1",
+            ["iam.auth.check-permission"]),
+        new WorkloadAccessProfile(
+            "registry-service",
+            1,
+            "roles.workloads.registry-service.v1",
             ["iam.auth.check-permission"])
     ]);
 
