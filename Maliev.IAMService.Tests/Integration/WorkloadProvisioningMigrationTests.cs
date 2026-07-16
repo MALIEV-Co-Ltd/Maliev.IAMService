@@ -11,6 +11,84 @@ namespace Maliev.IAMService.Tests.Integration;
 public sealed class WorkloadProvisioningMigrationTests(TestWebApplicationFactory factory)
 {
     private const string PreHardeningMigration = "20260715224757_AddWorkloadPrincipalProvisioning";
+    private const string PreLegacyServiceCleanupMigration = "20260715231400_HardenWorkloadPrincipalProvisioning";
+
+    [Fact]
+    public async Task LegacyServiceCleanup_RemovesPlatformOwnerBindingsFromNonHumanPrincipals()
+    {
+        var schema = CreateSchemaName();
+        await CreateSchemaAsync(schema);
+        try
+        {
+            await using var context = CreateContext(schema);
+            var migrator = context.GetService<IMigrator>();
+            await migrator.MigrateAsync(PreLegacyServiceCleanupMigration);
+
+            var humanId = Guid.NewGuid();
+            var legacyServiceId = Guid.NewGuid();
+            var workloadId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 INSERT INTO roles
+                     (role_id, service_name, role_name, description, is_custom, created_by, created_at, updated_at)
+                 VALUES
+                     ('roles.platform.owner', 'platform', 'Platform Owner', 'Full administrative access', FALSE, NULL, {now}, {now})
+                 """);
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 INSERT INTO principals
+                     (principal_id, principal_type, email, display_name, is_active, created_at, updated_at, workload_id)
+                 VALUES
+                     ({humanId}, 'user', 'owner@maliev.com', 'Human owner', TRUE, {now}, {now}, NULL),
+                     ({legacyServiceId}, 'system', 'system:service:pricing@serviceaccount.maliev.local', 'Legacy service', TRUE, {now}, {now}, NULL),
+                     ({workloadId}, 'service_account', 'pricing-service@workload.maliev.local', 'Managed workload', TRUE, {now}, {now}, 'pricing-service')
+                 """);
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 INSERT INTO principal_role_bindings
+                     (binding_id, principal_id, role_id, resource_path, granted_by, granted_at, expires_at)
+                 VALUES
+                     ({Guid.NewGuid()}, {humanId}, 'roles.platform.owner', '*', {humanId}, {now}, NULL),
+                     ({Guid.NewGuid()}, {legacyServiceId}, 'roles.platform.owner', '*', {humanId}, {now}, NULL),
+                     ({Guid.NewGuid()}, {workloadId}, 'roles.platform.owner', '*', {humanId}, {now}, NULL)
+                 """);
+
+            await migrator.MigrateAsync();
+
+            var remaining = await context.Database
+                .SqlQuery<Guid>($"SELECT principal_id AS \"Value\" FROM principal_role_bindings WHERE role_id = 'roles.platform.owner' ORDER BY principal_id")
+                .ToListAsync();
+            Assert.Contains(humanId, remaining);
+            Assert.DoesNotContain(workloadId, remaining);
+            Assert.DoesNotContain(legacyServiceId, remaining);
+
+            var serviceGrant = await Assert.ThrowsAsync<PostgresException>(() =>
+                context.Database.ExecuteSqlInterpolatedAsync(
+                    $"""
+                     INSERT INTO principal_role_bindings
+                         (binding_id, principal_id, role_id, resource_path, granted_by, granted_at, expires_at)
+                     VALUES
+                         ({Guid.NewGuid()}, {workloadId}, 'roles.platform.owner', '*', {humanId}, {now}, NULL)
+                     """));
+            Assert.Equal(PostgresErrorCodes.CheckViolation, serviceGrant.SqlState);
+
+            var humanTypeChange = await Assert.ThrowsAsync<PostgresException>(() =>
+                context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE principals SET principal_type = 'service_account' WHERE principal_id = {humanId}"));
+            Assert.Equal(PostgresErrorCodes.CheckViolation, humanTypeChange.SqlState);
+
+            var rollbackFailure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                migrator.MigrateAsync(PreLegacyServiceCleanupMigration));
+            var rollback = Assert.IsType<PostgresException>(rollbackFailure.InnerException);
+            Assert.Equal(PostgresErrorCodes.ObjectNotInPrerequisiteState, rollback.SqlState);
+            Assert.Contains("cannot roll back", rollback.MessageText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await DropSchemaAsync(schema);
+        }
+    }
 
     [Fact]
     public async Task HardeningMigration_BackfillsActorAndAddsRestrictiveForeignKeys()
