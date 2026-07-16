@@ -104,7 +104,7 @@ try
     // ===== JWT Authentication =====
     // Use ServiceDefaults extension which supports both RSA (user tokens) and HMAC (service account tokens)
     builder.AddJwtAuthentication();
-    builder.Services.AddTokenIssuanceCapabilityAuthentication(builder.Configuration);
+    builder.Services.AddTokenIssuanceCapabilityAuthentication(builder.Configuration, builder.Environment);
 
     // Configure default authorization policy
     builder.Services.AddAuthorization(options =>
