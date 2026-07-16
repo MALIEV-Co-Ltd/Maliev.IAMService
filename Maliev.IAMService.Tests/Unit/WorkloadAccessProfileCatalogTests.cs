@@ -31,6 +31,35 @@ public sealed class WorkloadAccessProfileCatalogTests
         Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
     }
 
+    [Theory]
+    [InlineData("-contact-service")]
+    [InlineData("contact-service-")]
+    [InlineData("contact--service")]
+    [InlineData("-")]
+    public void Constructor_NonCanonicalHyphenatedWorkloadId_RejectsProfile(string workloadId)
+    {
+        var profile = new WorkloadAccessProfile(
+            workloadId,
+            1,
+            $"roles.workloads.{workloadId}.v1",
+            ["country.countries.read"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
+    [Fact]
+    public void Constructor_WorkloadIdExceedsPersistenceLimit_RejectsProfile()
+    {
+        var workloadId = new string('a', 101);
+        var profile = new WorkloadAccessProfile(
+            workloadId,
+            1,
+            $"roles.workloads.{workloadId}.v1",
+            ["country.countries.read"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
     [Fact]
     public void Get_AuthServiceVersionOne_ReturnsExactLeastPrivilegePermissions()
     {
@@ -111,6 +140,10 @@ public sealed class WorkloadAccessProfileCatalogTests
     [InlineData("folders//contacts")]
     [InlineData("folders/contacts/")]
     [InlineData("folders/Contacts")]
+    [InlineData("folders/-contacts")]
+    [InlineData("folders/contacts-")]
+    [InlineData("folders/contact--files")]
+    [InlineData("folders/-")]
     public void Constructor_NonCanonicalAdditionalGrantPath_RejectsProfile(string? resourcePath)
     {
         var profile = CreateProfileWithGrant(
@@ -127,10 +160,26 @@ public sealed class WorkloadAccessProfileCatalogTests
     [InlineData("roles.workloads.contact-service.v1.upload.contacts")]
     [InlineData("roles.workloads.other-service.v1.upload-contacts")]
     [InlineData("roles.platform.owner")]
+    [InlineData("roles.workloads.contact-service.v1.-upload")]
+    [InlineData("roles.workloads.contact-service.v1.upload-")]
+    [InlineData("roles.workloads.contact-service.v1.upload--contacts")]
+    [InlineData("roles.workloads.contact-service.v1.-")]
     public void Constructor_NonCanonicalAdditionalGrantRole_RejectsProfile(string roleId)
     {
         var profile = CreateProfileWithGrant(roleId, "folders/contacts", ["upload.files.upload"]);
 
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
+    [Fact]
+    public void Constructor_DerivedAdditionalRoleIdExceedsPersistenceLimit_RejectsProfile()
+    {
+        const string baseRoleId = "roles.workloads.contact-service.v1";
+        var suffix = new string('a', 255 - baseRoleId.Length);
+        var roleId = $"{baseRoleId}.{suffix}";
+        var profile = CreateProfileWithGrant(roleId, "folders/contacts", ["upload.files.upload"]);
+
+        Assert.True(roleId.Length > 255);
         Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
     }
 

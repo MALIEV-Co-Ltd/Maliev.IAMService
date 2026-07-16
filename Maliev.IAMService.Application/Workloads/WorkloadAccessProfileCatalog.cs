@@ -35,6 +35,9 @@ public sealed record WorkloadAccessProfile(
 /// </summary>
 public sealed class WorkloadAccessProfileCatalog
 {
+    private const int MaximumRoleIdLength = 255;
+    private const int MaximumResourcePathLength = 500;
+    private const int MaximumWorkloadIdLength = 100;
     private readonly IReadOnlyDictionary<(string WorkloadId, int Version), WorkloadAccessProfile> _profiles;
 
     /// <summary>Gets the production profile catalog.</summary>
@@ -102,9 +105,7 @@ public sealed class WorkloadAccessProfileCatalog
 
     private static void Validate(WorkloadAccessProfile profile)
     {
-        if (string.IsNullOrWhiteSpace(profile.WorkloadId) ||
-            profile.WorkloadId.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-')) ||
-            !string.Equals(profile.WorkloadId, profile.WorkloadId.ToLowerInvariant(), StringComparison.Ordinal) ||
+        if (!IsCanonicalHyphenatedSegment(profile.WorkloadId, MaximumWorkloadIdLength) ||
             profile.Version <= 0 ||
             string.IsNullOrWhiteSpace(profile.RoleId) ||
             profile.Permissions.Count == 0)
@@ -119,7 +120,8 @@ public sealed class WorkloadAccessProfileCatalog
         }
 
         var expectedRoleId = $"roles.workloads.{profile.WorkloadId}.v{profile.Version}";
-        if (!string.Equals(profile.RoleId, expectedRoleId, StringComparison.Ordinal))
+        if (profile.RoleId.Length > MaximumRoleIdLength ||
+            !string.Equals(profile.RoleId, expectedRoleId, StringComparison.Ordinal))
         {
             throw new ArgumentException($"Workload profile role must be the canonical server-owned role '{expectedRoleId}'.", nameof(profile));
         }
@@ -133,9 +135,8 @@ public sealed class WorkloadAccessProfileCatalog
             var suffix = grant.RoleId.StartsWith(expectedPrefix, StringComparison.Ordinal)
                 ? grant.RoleId[expectedPrefix.Length..]
                 : string.Empty;
-            if (suffix.Length == 0 ||
-                suffix.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-')) ||
-                !string.Equals(suffix, suffix.ToLowerInvariant(), StringComparison.Ordinal) ||
+            if (!IsCanonicalHyphenatedSegment(suffix, MaximumRoleIdLength) ||
+                grant.RoleId.Length > MaximumRoleIdLength ||
                 !roleIds.Add(grant.RoleId))
             {
                 throw new ArgumentException("Additional workload roles must use a unique canonical suffix owned by the base role.", nameof(profile));
@@ -170,10 +171,16 @@ public sealed class WorkloadAccessProfileCatalog
 
     private static bool IsCanonicalResourcePath(string resourcePath) =>
         !string.IsNullOrWhiteSpace(resourcePath) &&
-        resourcePath.Length <= 500 &&
+        resourcePath.Length <= MaximumResourcePathLength &&
         !resourcePath.Contains('*', StringComparison.Ordinal) &&
-        resourcePath.Split('/').All(segment =>
-            segment.Length > 0 &&
-            segment.All(character => char.IsAsciiLetterOrDigit(character) || character == '-') &&
-            string.Equals(segment, segment.ToLowerInvariant(), StringComparison.Ordinal));
+        resourcePath.Split('/').All(segment => IsCanonicalHyphenatedSegment(segment, MaximumResourcePathLength));
+
+    private static bool IsCanonicalHyphenatedSegment(string value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length <= maximumLength &&
+        char.IsAsciiLetterOrDigit(value[0]) &&
+        char.IsAsciiLetterOrDigit(value[^1]) &&
+        !value.Contains("--", StringComparison.Ordinal) &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character == '-') &&
+        string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal);
 }
