@@ -39,4 +39,40 @@ public sealed class WorkloadAccessProfileCatalogTests
         Assert.Equal("roles.workloads.auth-service.v1", profile.RoleId);
         Assert.Equal(["iam.auth.resolve-permissions"], profile.Permissions);
     }
+
+    [Fact]
+    public void Get_ContactServiceVersionOne_ReturnsExactLeastPrivilegePermissions()
+    {
+        var profile = WorkloadAccessProfileCatalog.Default.Get("contact-service", 1);
+
+        Assert.Equal("roles.workloads.contact-service.v1", profile.RoleId);
+        Assert.Equal(
+            [
+                "country.countries.read",
+                "upload.files.upload",
+                "upload.files.download",
+                "upload.files.delete"
+            ],
+            profile.Permissions);
+    }
+
+    [Fact]
+    public void Constructor_SourcePermissionListMutated_PreservesRegisteredProfile()
+    {
+        var permissions = new List<string> { "country.countries.read" };
+        var catalog = new WorkloadAccessProfileCatalog(
+        [
+            new WorkloadAccessProfile(
+                "contact-service",
+                1,
+                "roles.workloads.contact-service.v1",
+                permissions)
+        ]);
+
+        permissions[0] = "country.countries.create";
+        permissions.Add("*");
+
+        var profile = catalog.Get("contact-service", 1);
+        Assert.Equal(["country.countries.read"], profile.Permissions);
+    }
 }

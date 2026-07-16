@@ -27,7 +27,17 @@ public sealed class WorkloadAccessProfileCatalog
             "auth-service",
             1,
             "roles.workloads.auth-service.v1",
-            ["iam.auth.resolve-permissions"])
+            ["iam.auth.resolve-permissions"]),
+        new WorkloadAccessProfile(
+            "contact-service",
+            1,
+            "roles.workloads.contact-service.v1",
+            [
+                "country.countries.read",
+                "upload.files.upload",
+                "upload.files.download",
+                "upload.files.delete"
+            ])
     ]);
 
     /// <summary>Initializes and validates a catalog.</summary>
@@ -38,10 +48,14 @@ public sealed class WorkloadAccessProfileCatalog
         var validated = new Dictionary<(string, int), WorkloadAccessProfile>();
         foreach (var profile in profiles)
         {
-            Validate(profile);
-            if (!validated.TryAdd((profile.WorkloadId, profile.Version), profile))
+            var registeredProfile = profile with
             {
-                throw new ArgumentException($"Duplicate workload profile '{profile.WorkloadId}' version {profile.Version}.", nameof(profiles));
+                Permissions = Array.AsReadOnly(profile.Permissions.ToArray())
+            };
+            Validate(registeredProfile);
+            if (!validated.TryAdd((registeredProfile.WorkloadId, registeredProfile.Version), registeredProfile))
+            {
+                throw new ArgumentException($"Duplicate workload profile '{registeredProfile.WorkloadId}' version {registeredProfile.Version}.", nameof(profiles));
             }
         }
 
