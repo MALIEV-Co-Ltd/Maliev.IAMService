@@ -461,6 +461,108 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         Assert.Equal(["roles.workloads.currency-service.v1"], tokenAuthority.Roles);
     }
 
+    [Fact]
+    public async Task Put_AccountingServiceProfile_IdempotentlyPersistsOnlyLivePermissionCheckAuthority()
+    {
+        await PrepareAccountingServiceAsync();
+        var operationId = Guid.Parse("acc00000-0000-4000-8000-000000000001");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/accounting-service", request);
+        var second = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/accounting-service", request);
+
+        Assert.True(first.StatusCode == HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        var secondResult = await second.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        Assert.NotNull(firstResult);
+        Assert.NotNull(secondResult);
+        Assert.NotEqual(ActorId, firstResult.PrincipalId);
+        Assert.Equal(firstResult.PrincipalId, secondResult.PrincipalId);
+        Assert.Equal("accounting-service", firstResult.WorkloadId);
+        Assert.Equal(1, firstResult.ProfileVersion);
+        Assert.Equal("roles.workloads.accounting-service.v1", firstResult.RoleId);
+        var responseBinding = Assert.Single(firstResult.Bindings);
+        Assert.Equal("roles.workloads.accounting-service.v1", responseBinding.RoleId);
+        Assert.Null(responseBinding.ResourcePath);
+        Assert.Equal(firstResult.Bindings, secondResult.Bindings);
+
+        await using var db = Factory.CreateDbContext();
+        var principal = await db.Principals.SingleAsync(candidate => candidate.WorkloadId == "accounting-service");
+        Assert.Equal("service_account", principal.PrincipalType);
+        Assert.Equal("accounting-service@workload.maliev.local", principal.Email);
+        Assert.Equal("accounting-service workload", principal.DisplayName);
+        Assert.True(principal.IsActive);
+
+        var binding = await db.PrincipalRoleBindings.SingleAsync(candidate => candidate.PrincipalId == principal.PrincipalId);
+        Assert.Equal("roles.workloads.accounting-service.v1", binding.RoleId);
+        Assert.Null(binding.ResourcePath);
+        Assert.Null(binding.ExpiresAt);
+
+        var role = await db.Roles
+            .Include(candidate => candidate.RolePermissions)
+            .SingleAsync(candidate => candidate.RoleId == binding.RoleId);
+        Assert.Equal("accounting-service workload v1", role.RoleName);
+        Assert.Equal(["iam.auth.check-permission"], role.RolePermissions.Select(item => item.PermissionId));
+        Assert.DoesNotContain(role.RolePermissions, item => item.PermissionId == "iam.auth.resolve-permissions");
+        Assert.Equal("iam", role.ServiceName);
+        Assert.Equal("Server-owned least-privilege workload role.", role.Description);
+        Assert.False(role.IsCustom);
+        Assert.Empty(await db.PrincipalPermissionBindings.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        Assert.Empty(await db.ServiceAccountApiKeys.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        var operation = await db.WorkloadProvisioningOperations.SingleAsync(candidate => candidate.OperationId == operationId);
+        Assert.Equal(principal.PrincipalId, operation.PrincipalId);
+        Assert.Equal(ActorId, operation.PerformedBy);
+        Assert.Equal("accounting-service", operation.WorkloadId);
+        Assert.Equal(1, operation.ProfileVersion);
+
+        using var scope = Factory.Services.CreateScope();
+        var resolver = scope.ServiceProvider.GetRequiredService<IPermissionResolver>();
+        Assert.True((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString(),
+            PermissionId = "iam.auth.check-permission",
+            BypassCache = true
+        })).Allowed);
+        Assert.False((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString(),
+            PermissionId = "iam.auth.resolve-permissions",
+            BypassCache = true
+        })).Allowed);
+
+        var tokenAuthority = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString()
+        });
+        Assert.Equal(["iam.auth.check-permission"], tokenAuthority.Permissions);
+        Assert.Equal(["roles.workloads.accounting-service.v1"], tokenAuthority.Roles);
+    }
+
+    [Fact]
+    public async Task Put_AccountingServiceReplayAfterRolePermissionDrift_ReturnsConflict()
+    {
+        await PrepareAccountingServiceAsync();
+        var operationId = Guid.Parse("acc00000-0000-4000-8000-000000000002");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/accounting-service", request);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.RolePermissions.Add(new RolePermission
+            {
+                RoleId = "roles.workloads.accounting-service.v1",
+                PermissionId = "iam.auth.resolve-permissions"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/accounting-service", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("extra")]
@@ -1399,6 +1501,16 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
     }
 
     private async Task PrepareCurrencyServiceAsync()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.check-permission");
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("iam.workload-principals.provision");
+        await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
+    }
+
+    private async Task PrepareAccountingServiceAsync()
     {
         await CleanDatabaseAsync();
         await SeedPermissionAsync("iam.auth.check-permission");
