@@ -61,7 +61,12 @@ public sealed class WorkloadAccessProfileCatalog
                     "folders/contacts",
                     ["upload.files.upload", "upload.files.download", "upload.files.delete"])
             ]
-        }
+        },
+        new WorkloadAccessProfile(
+            "search-service",
+            1,
+            "roles.workloads.search-service.v1",
+            ["iam.auth.check-permission"])
     ]);
 
     /// <summary>Initializes and validates a catalog.</summary>
