@@ -148,13 +148,8 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
             // Grant Platform Owner to the first @maliev.com employee that logs in, if no owner exists yet.
             // Checking binding existence (not principal count) so retries and stale principals don't block bootstrap.
             //
-            // ⚠ SYSTEM PRINCIPAL FILTER — the join on PrincipalType == "user" is NOT optional.
-            //
-            // PrincipalService auto-registers every .NET service/worker as a "system" principal and
-            // immediately grants it roles.platform.owner so services can call each other at startup.
-            // Without the PrincipalType filter, the query would find those system bindings and conclude
-            // that a human Platform Owner already exists, silently skipping bootstrap entirely.
-            // The first real user would then have zero permissions and receive 403 everywhere.
+            // Keep this bootstrap decision scoped to human owners. Workload principals are provisioned
+            // through the explicit least-privilege workload API and must never influence first-user setup.
             var platformOwnerExists = await (
                 from b in _dbContext.PrincipalRoleBindings
                 join p in _dbContext.Principals on b.PrincipalId equals p.PrincipalId
@@ -353,7 +348,7 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                             roleId, principalId);
 
                         // Clear permission cache to ensure fresh permissions are fetched on next request
-                        var cacheKey = $"iam:principal:{principalId}:permissions";
+                        var cacheKey = IamPermissionCacheKeys.ForPermissions(principalId);
                         await _cacheService.RemoveAsync(cacheKey, ct);
                         _logger.LogInformation(
                             "Cleared permission cache for principal {PrincipalId} after granting {RoleId}",
@@ -366,7 +361,7 @@ public class EmployeeCreatedConsumer : IConsumer<EmployeeCreatedEvent>
                             roleId, principalId);
 
                         // Clear cache anyway - the binding exists so permissions should be refreshed
-                        var cacheKey = $"iam:principal:{principalId}:permissions";
+                        var cacheKey = IamPermissionCacheKeys.ForPermissions(principalId);
                         await _cacheService.RemoveAsync(cacheKey, ct);
                         _logger.LogInformation(
                             "Cleared permission cache for principal {PrincipalId} (binding already existed)",

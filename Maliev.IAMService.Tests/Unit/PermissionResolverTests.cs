@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 using Maliev.IAMService.Application.DTOs.Requests;
@@ -44,8 +42,7 @@ public sealed class PermissionResolverTests
         var principalId = Guid.NewGuid();
         const string permissionId = "project.projects.read";
         const string resourcePath = "projects/project-123";
-        var resourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(resourcePath))).ToLowerInvariant();
-        var expectedCacheKey = $"iam:principal:{principalId}:permissions:path:{resourceHash}";
+        var expectedCacheKey = IamPermissionCacheKeys.ForPermissions(principalId, resourcePath);
         var bindingRepository = new Mock<IBindingRepository>();
         bindingRepository
             .Setup(repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
@@ -108,6 +105,61 @@ public sealed class PermissionResolverTests
         bindingRepository.Verify(
             repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()),
             Times.Exactly(2));
+    }
+
+    /// <summary>
+    /// Authority snapshots from the pre-hardening namespace must never be reused after the cutover.
+    /// </summary>
+    [Fact]
+    public async Task CheckPermissionAsync_PreHardeningWildcardCache_IsIgnored()
+    {
+        var principalId = Guid.NewGuid();
+        var bindingRepository = new Mock<IBindingRepository>();
+        bindingRepository
+            .Setup(repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        bindingRepository
+            .Setup(repository => repository.GetDirectPermissionsByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var principalService = new Mock<IPrincipalService>();
+        principalService
+            .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "service_account", IsActive = true });
+        var legacyKey = $"iam:principal:{principalId}:permissions";
+        var cacheService = new Mock<ICacheService>();
+        cacheService
+            .Setup(service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, CancellationToken _) => key == legacyKey
+                ? new ResolvePermissionsResponse
+                {
+                    PrincipalId = principalId,
+                    Permissions = ["*"],
+                    Roles = ["roles.platform.owner"],
+                    FromCache = false
+                }
+                : null);
+        var resolver = new PermissionResolver(
+            bindingRepository.Object,
+            principalService.Object,
+            cacheService.Object,
+            NullLogger<PermissionResolver>.Instance);
+
+        var response = await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principalId.ToString(),
+            PermissionId = "iam.workload-principals.provision"
+        });
+
+        Assert.False(response.Allowed);
+        Assert.False(response.FromCache);
+        cacheService.Verify(
+            service => service.GetAsync<ResolvePermissionsResponse>(
+                IamPermissionCacheKeys.ForPermissions(principalId),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
@@ -211,7 +263,7 @@ public sealed class PermissionResolverTests
             Times.Never);
         cacheService.Verify(
             service => service.RemoveByPrefixAsync(
-                $"iam:principal:{principalId}:permissions",
+                IamPermissionCacheKeys.ForPermissions(principalId),
                 It.IsAny<CancellationToken>()),
             Times.Once);
         bindingRepository.Verify(

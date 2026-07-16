@@ -321,7 +321,7 @@ public class RoleService : IRoleService
         await _roleRepository.UpdateAsync(role, cancellationToken);
 
         await _cacheService.RemoveAsync($"iam:role:{roleId}", cancellationToken);
-        await _cacheService.RemoveByPrefixAsync("iam:principal:", cancellationToken);
+        await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.PrincipalPrefix, cancellationToken);
 
         var roleUpdatedEvent = new RoleUpdatedEvent(
             MessageId: Guid.NewGuid(),
