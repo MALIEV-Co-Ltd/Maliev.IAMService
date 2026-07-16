@@ -75,6 +75,36 @@ public sealed class WorkloadProvisioningMigrationTests(TestWebApplicationFactory
         }
     }
 
+    [Theory]
+    [InlineData("user", false)]
+    [InlineData("service_account", true)]
+    public async Task HardeningMigration_InvalidAuditActor_FailsClosed(string principalType, bool isActive)
+    {
+        var schema = CreateSchemaName();
+        await CreateSchemaAsync(schema);
+        try
+        {
+            await using var context = CreateContext(schema);
+            var migrator = context.GetService<IMigrator>();
+            await migrator.MigrateAsync(PreHardeningMigration);
+            await SeedLegacyOperationAsync(
+                context,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                includeAudit: true,
+                actorPrincipalType: principalType,
+                actorIsActive: isActive);
+
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => migrator.MigrateAsync());
+            Assert.Contains("cannot attribute existing workload provisioning operations", exception.MessageText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await DropSchemaAsync(schema);
+        }
+    }
+
     private IAMDbContext CreateContext(string schema)
     {
         var connectionString = new NpgsqlConnectionStringBuilder(factory.MigrationTestConnectionString)
@@ -110,7 +140,9 @@ public sealed class WorkloadProvisioningMigrationTests(TestWebApplicationFactory
         Guid actorId,
         Guid workloadPrincipalId,
         Guid operationId,
-        bool includeAudit)
+        bool includeAudit,
+        string actorPrincipalType = "user",
+        bool actorIsActive = true)
     {
         var now = DateTime.UtcNow;
         await context.Database.ExecuteSqlInterpolatedAsync(
@@ -118,7 +150,7 @@ public sealed class WorkloadProvisioningMigrationTests(TestWebApplicationFactory
              INSERT INTO principals
                  (principal_id, principal_type, email, display_name, is_active, created_at, updated_at, workload_id)
              VALUES
-                 ({actorId}, 'user', {actorId.ToString("D") + "@example.test"}, 'Legacy actor', TRUE, {now}, {now}, NULL),
+                 ({actorId}, {actorPrincipalType}, {actorId.ToString("D") + "@example.test"}, 'Legacy actor', {actorIsActive}, {now}, {now}, NULL),
                  ({workloadPrincipalId}, 'service_account', 'auth-service@workload.maliev.local', 'Auth workload', TRUE, {now}, {now}, 'auth-service')
              """);
         await context.Database.ExecuteSqlInterpolatedAsync(

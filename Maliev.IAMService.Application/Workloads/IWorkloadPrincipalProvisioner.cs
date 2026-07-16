@@ -29,6 +29,16 @@ public sealed class WorkloadProvisioningConflictException : Exception
     }
 }
 
+/// <summary>Signals that the authenticated employee lacks current persisted provisioning authority.</summary>
+public sealed class WorkloadProvisioningAuthorizationException : Exception
+{
+    /// <summary>Initializes an authorization exception.</summary>
+    /// <param name="message">Safe authorization detail.</param>
+    public WorkloadProvisioningAuthorizationException(string message) : base(message)
+    {
+    }
+}
+
 /// <summary>Signals an attempt to mutate a server-managed workload identity through a generic path.</summary>
 public sealed class ManagedWorkloadMutationException : InvalidOperationException
 {

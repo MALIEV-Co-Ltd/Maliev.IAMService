@@ -91,7 +91,9 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
     public async Task Put_MissingProfilePermission_RollsBackPrincipalOperationAndAudit()
     {
         await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.workload-principals.provision");
         await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
 
         var response = await _employeeClient.PutAsJsonAsync(
             "/iam/v1/workload-principals/auth-service",
@@ -128,6 +130,173 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
             new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_JwtProvisionClaimWithoutPersistedAuthority_ReturnsForbidden()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedActorAsync(ActorId, "user", true);
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_RevokedPersistedAuthorityWithStaleJwtClaim_ReturnsForbidden()
+    {
+        await PrepareAsync();
+        var first = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        await using (var db = Factory.CreateDbContext())
+        {
+            var authority = await db.PrincipalPermissionBindings.SingleAsync(item =>
+                item.PrincipalId == ActorId && item.PermissionId == "iam.workload-principals.provision");
+            db.PrincipalPermissionBindings.Remove(authority);
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_PersistedWildcardAuthorityOnly_ReturnsForbidden()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("*");
+        await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("*");
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_PlatformOwnerShortcutOnly_ReturnsForbidden()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("*");
+        await SeedActorAsync(ActorId, "user", true);
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Roles.Add(new Role
+            {
+                RoleId = "roles.platform.owner",
+                RoleName = "Platform Owner",
+                ServiceName = "platform",
+                IsCustom = false,
+                RolePermissions = [new RolePermission { RoleId = "roles.platform.owner", PermissionId = "*" }]
+            });
+            db.PrincipalRoleBindings.Add(new PrincipalRoleBinding
+            {
+                BindingId = Guid.NewGuid(),
+                PrincipalId = ActorId,
+                RoleId = "roles.platform.owner",
+                GrantedBy = ActorId,
+                GrantedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_CaseVariantPlatformOwnerWithExactPermission_ReturnsForbidden()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("iam.workload-principals.provision");
+        await SeedActorAsync(ActorId, "user", true);
+        const string caseVariantOwnerRole = "Roles.Platform.Owner";
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Roles.Add(new Role
+            {
+                RoleId = caseVariantOwnerRole,
+                RoleName = "Case variant owner",
+                ServiceName = "platform",
+                IsCustom = false,
+                RolePermissions = [new RolePermission
+                {
+                    RoleId = caseVariantOwnerRole,
+                    PermissionId = "iam.workload-principals.provision"
+                }]
+            });
+            db.PrincipalRoleBindings.Add(new PrincipalRoleBinding
+            {
+                BindingId = Guid.NewGuid(),
+                PrincipalId = ActorId,
+                RoleId = caseVariantOwnerRole,
+                GrantedBy = ActorId,
+                GrantedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_ExactPersistedRoleAuthority_AllowsProvisioning()
+    {
+        await CleanDatabaseAsync();
+        await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("iam.workload-principals.provision");
+        await SeedActorAsync(ActorId, "user", true);
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Roles.Add(new Role
+            {
+                RoleId = "roles.iam.workload-provisioner",
+                RoleName = "Workload provisioner",
+                ServiceName = "iam",
+                IsCustom = false,
+                RolePermissions = [new RolePermission
+                {
+                    RoleId = "roles.iam.workload-provisioner",
+                    PermissionId = "iam.workload-principals.provision"
+                }]
+            });
+            db.PrincipalRoleBindings.Add(new PrincipalRoleBinding
+            {
+                BindingId = Guid.NewGuid(),
+                PrincipalId = ActorId,
+                RoleId = "roles.iam.workload-provisioner",
+                GrantedBy = ActorId,
+                GrantedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Theory]
@@ -278,6 +447,7 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         await PrepareAsync();
         var otherActorId = Guid.Parse("b0000000-0000-0000-0000-000000000002");
         await SeedActorAsync(otherActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision", otherActorId);
         var operationId = Guid.NewGuid();
         var first = await _employeeClient.PutAsJsonAsync(
             "/iam/v1/workload-principals/auth-service",
@@ -501,6 +671,87 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
     }
 
+    [Theory]
+    [InlineData(true, "iam")]
+    [InlineData(false, "custom")]
+    public async Task Put_CanonicalRoleWithManagedMetadataDrift_ReturnsConflict(bool isCustom, string serviceName)
+    {
+        await PrepareAsync();
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Roles.Add(new Role
+            {
+                RoleId = "roles.workloads.auth-service.v1",
+                RoleName = "Impersonating role",
+                ServiceName = serviceName,
+                IsCustom = isCustom,
+                RolePermissions = [new RolePermission
+                {
+                    RoleId = "roles.workloads.auth-service.v1",
+                    PermissionId = "iam.auth.resolve-permissions"
+                }]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Impersonating role", "Server-owned least-privilege workload role.")]
+    [InlineData("auth-service workload v1", "Mutated description")]
+    public async Task Put_CanonicalRoleWithDisplayMetadataDrift_ReturnsConflict(string roleName, string description)
+    {
+        await PrepareAsync();
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Roles.Add(new Role
+            {
+                RoleId = "roles.workloads.auth-service.v1",
+                RoleName = roleName,
+                Description = description,
+                ServiceName = "iam",
+                IsCustom = false,
+                RolePermissions = [new RolePermission
+                {
+                    RoleId = "roles.workloads.auth-service.v1",
+                    PermissionId = "iam.auth.resolve-permissions"
+                }]
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = Guid.NewGuid() });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_ReplayAfterManagedRoleDisplayMetadataDrift_ReturnsConflict()
+    {
+        await PrepareAsync();
+        var operationId = Guid.NewGuid();
+        await ProvisionAsync(operationId);
+        await using (var db = Factory.CreateDbContext())
+        {
+            var role = await db.Roles.SingleAsync(item => item.RoleId == "roles.workloads.auth-service.v1");
+            role.RoleName = "Mutated role name";
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/auth-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
     [Fact]
     public async Task Database_DeleteManagedWorkloadPrincipal_IsRejectedAndAuditPreserved()
     {
@@ -609,7 +860,23 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
     {
         await CleanDatabaseAsync();
         await SeedPermissionAsync("iam.auth.resolve-permissions");
+        await SeedPermissionAsync("iam.workload-principals.provision");
         await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
+    }
+
+    private async Task SeedDirectAuthorityAsync(string permissionId, Guid? principalId = null)
+    {
+        await using var db = Factory.CreateDbContext();
+        db.PrincipalPermissionBindings.Add(new PrincipalPermissionBinding
+        {
+            BindingId = Guid.NewGuid(),
+            PrincipalId = principalId ?? ActorId,
+            PermissionId = permissionId,
+            ResourcePath = null,
+            GrantedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
     }
 
     private async Task SeedActorAsync(Guid principalId, string principalType, bool isActive)

@@ -1,7 +1,6 @@
 using Asp.Versioning;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using Maliev.IAMService.Application.DTOs.Requests;
-using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Application.Workloads;
 using Maliev.IAMService.Domain.Constants;
 using Microsoft.AspNetCore.Mvc;
@@ -13,8 +12,7 @@ namespace Maliev.IAMService.Api.Controllers;
 [ApiVersion("1")]
 [Route("iam/v{version:apiVersion}/workload-principals")]
 public sealed class WorkloadPrincipalsController(
-    IWorkloadPrincipalProvisioner provisioner,
-    IPrincipalService principalService) : ControllerBase
+    IWorkloadPrincipalProvisioner provisioner) : ControllerBase
 {
     /// <summary>Creates or reconciles a workload principal from a server-owned access profile.</summary>
     /// <param name="workloadId">Canonical workload identifier.</param>
@@ -43,15 +41,13 @@ public sealed class WorkloadPrincipalsController(
             return Forbid();
         }
 
-        var actor = await principalService.GetByIdAsync(performedBy, cancellationToken);
-        if (actor is null || !actor.IsActive || !string.Equals(actor.PrincipalType, "user", StringComparison.Ordinal))
-        {
-            return Forbid();
-        }
-
         try
         {
             return Ok(await provisioner.ProvisionAsync(workloadId, request, performedBy, cancellationToken));
+        }
+        catch (WorkloadProvisioningAuthorizationException)
+        {
+            return Forbid();
         }
         catch (WorkloadProvisioningConflictException exception)
         {
