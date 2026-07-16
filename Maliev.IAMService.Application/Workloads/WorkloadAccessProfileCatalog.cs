@@ -76,6 +76,11 @@ public sealed class WorkloadAccessProfileCatalog
             "country-service",
             1,
             "roles.workloads.country-service.v1",
+            ["iam.auth.check-permission"]),
+        new WorkloadAccessProfile(
+            "currency-service",
+            1,
+            "roles.workloads.currency-service.v1",
             ["iam.auth.check-permission"])
     ]);
 
