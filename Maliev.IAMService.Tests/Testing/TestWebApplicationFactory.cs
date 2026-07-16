@@ -75,7 +75,8 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
         string? keyId = CapabilityKeyId,
         DateTime? notBefore = null,
         DateTime? expires = null,
-        SigningCredentials? signingCredentials = null)
+        SigningCredentials? signingCredentials = null,
+        IReadOnlyCollection<string>? audiences = null)
     {
         var now = DateTime.UtcNow;
         var claims = new List<Claim>
@@ -102,6 +103,11 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
             notBefore ?? now.AddSeconds(-1),
             expires ?? now.AddSeconds(30),
             credentials);
+        if (audiences is not null)
+        {
+            token.Payload[JwtRegisteredClaimNames.Aud] = audiences.ToArray();
+        }
+
         if (keyId is null)
         {
             token.Header.Remove(JwtHeaderParameterNames.Kid);

@@ -96,7 +96,8 @@ public static class TokenIssuanceCapabilityAuthentication
                 policy.RequireAssertion(context => HasExactClaims(
                     context.User,
                     DateTimeOffset.UtcNow,
-                    maximumLifetimeSeconds));
+                    maximumLifetimeSeconds,
+                    audience));
             });
 
         return services;
@@ -121,9 +122,11 @@ public static class TokenIssuanceCapabilityAuthentication
     private static bool HasExactClaims(
         ClaimsPrincipal principal,
         DateTimeOffset now,
-        int maximumLifetimeSeconds)
+        int maximumLifetimeSeconds,
+        string expectedAudience)
     {
         if (!HasSingleClaim(principal, JwtRegisteredClaimNames.Sub, ExpectedSubject) ||
+            !HasSingleClaim(principal, JwtRegisteredClaimNames.Aud, expectedAudience) ||
             !HasSingleClaim(principal, "service_name", ExpectedServiceName) ||
             !HasSingleClaim(principal, "client_id", ExpectedClientId) ||
             !HasSingleClaim(principal, "user_type", ExpectedUserType) ||
@@ -137,6 +140,8 @@ public static class TokenIssuanceCapabilityAuthentication
         var targets = principal.FindAll("target_principal_id").Select(claim => claim.Value).ToArray();
         var tokenIds = principal.FindAll(JwtRegisteredClaimNames.Jti).Select(claim => claim.Value).ToArray();
         var issuedAtValues = principal.FindAll(JwtRegisteredClaimNames.Iat).Select(claim => claim.Value).ToArray();
+        var notBeforeValues = principal.FindAll(JwtRegisteredClaimNames.Nbf).Select(claim => claim.Value).ToArray();
+        var expiresValues = principal.FindAll(JwtRegisteredClaimNames.Exp).Select(claim => claim.Value).ToArray();
         if (targets.Length != 1 ||
             !Guid.TryParseExact(targets[0], "D", out var target) ||
             !string.Equals(targets[0], target.ToString("D"), StringComparison.Ordinal) ||
@@ -144,7 +149,11 @@ public static class TokenIssuanceCapabilityAuthentication
             !Guid.TryParseExact(tokenIds[0], "D", out var tokenId) ||
             !string.Equals(tokenIds[0], tokenId.ToString("D"), StringComparison.Ordinal) ||
             issuedAtValues.Length != 1 ||
-            !long.TryParse(issuedAtValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var issuedAtSeconds))
+            !long.TryParse(issuedAtValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var issuedAtSeconds) ||
+            notBeforeValues.Length != 1 ||
+            !long.TryParse(notBeforeValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var notBeforeSeconds) ||
+            expiresValues.Length != 1 ||
+            !long.TryParse(expiresValues[0], NumberStyles.None, CultureInfo.InvariantCulture, out var expiresSeconds))
         {
             return false;
         }
@@ -152,7 +161,13 @@ public static class TokenIssuanceCapabilityAuthentication
         try
         {
             var issuedAt = DateTimeOffset.FromUnixTimeSeconds(issuedAtSeconds);
-            return issuedAt <= now && issuedAt >= now.AddSeconds(-maximumLifetimeSeconds);
+            var notBefore = DateTimeOffset.FromUnixTimeSeconds(notBeforeSeconds);
+            var expires = DateTimeOffset.FromUnixTimeSeconds(expiresSeconds);
+            return issuedAt <= now &&
+                issuedAt >= now.AddSeconds(-maximumLifetimeSeconds) &&
+                notBefore <= issuedAt &&
+                issuedAt < expires &&
+                expires - issuedAt <= TimeSpan.FromSeconds(maximumLifetimeSeconds);
         }
         catch (ArgumentOutOfRangeException)
         {

@@ -24,6 +24,16 @@ public interface IPermissionResolver
     Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Resolves current effective permissions for security-token issuance without accepting a cached authority snapshot.
+    /// </summary>
+    /// <param name="request">Permission resolution request containing the target principal ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The current authoritative permissions and roles.</returns>
+    Task<ResolvePermissionsResponse> ResolvePermissionsForTokenIssuanceAsync(
+        ResolvePermissionsRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Checks if a principal has a specific permission with latency tracking.
     /// Internally uses ResolvePermissionsAsync and benefits from the same caching strategy.
     /// Target latency: &lt;10ms for cached results, &lt;50ms for cache misses.
@@ -68,6 +78,12 @@ public class PermissionResolver : IPermissionResolver
     /// <inheritdoc />
     public Task<ResolvePermissionsResponse> ResolvePermissionsAsync(ResolvePermissionsRequest request, CancellationToken cancellationToken = default)
         => ResolvePermissionsCoreAsync(request, bypassCache: false, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<ResolvePermissionsResponse> ResolvePermissionsForTokenIssuanceAsync(
+        ResolvePermissionsRequest request,
+        CancellationToken cancellationToken = default)
+        => ResolvePermissionsCoreAsync(request, bypassCache: true, cancellationToken);
 
     private async Task<ResolvePermissionsResponse> ResolvePermissionsCoreAsync(
         ResolvePermissionsRequest request,
