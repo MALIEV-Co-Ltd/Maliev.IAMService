@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
+using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Application.Workloads;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Tests.Testing;
@@ -45,6 +46,197 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         Assert.Empty(await db.ServiceAccountApiKeys.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
         Assert.Single(await db.WorkloadProvisioningOperations.Where(candidate => candidate.OperationId == operationId).ToListAsync());
         Assert.Contains(await db.IAMAuditLogs.ToListAsync(), candidate => candidate.Action == "PROVISION_WORKLOAD_PRINCIPAL");
+    }
+
+    [Fact]
+    public async Task Put_ContactServiceProfile_IdempotentlyCreatesExactLeastPrivilegeAuthority()
+    {
+        await PrepareContactServiceAsync();
+        var operationId = Guid.NewGuid();
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/contact-service", request);
+        var second = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/contact-service", request);
+
+        Assert.True(first.StatusCode == HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        var secondResult = await second.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        Assert.NotNull(firstResult);
+        Assert.NotNull(secondResult);
+        Assert.Equal(firstResult.PrincipalId, secondResult.PrincipalId);
+        Assert.Equal("contact-service", firstResult.WorkloadId);
+        Assert.Equal(1, firstResult.ProfileVersion);
+        Assert.Equal("roles.workloads.contact-service.v1", firstResult.RoleId);
+        Assert.Equal(
+            [
+                new WorkloadPrincipalBindingResponse
+                {
+                    RoleId = "roles.workloads.contact-service.v1",
+                    ResourcePath = null
+                },
+                new WorkloadPrincipalBindingResponse
+                {
+                    RoleId = "roles.workloads.contact-service.v1.upload-contacts",
+                    ResourcePath = "folders/contacts"
+                }
+            ],
+            firstResult.Bindings);
+        Assert.Equal(firstResult.Bindings, secondResult.Bindings);
+
+        await using var db = Factory.CreateDbContext();
+        var principal = await db.Principals.SingleAsync(candidate => candidate.WorkloadId == "contact-service");
+        Assert.Equal("service_account", principal.PrincipalType);
+        Assert.Equal("contact-service@workload.maliev.local", principal.Email);
+        Assert.Equal("contact-service workload", principal.DisplayName);
+        Assert.True(principal.IsActive);
+
+        var bindings = await db.PrincipalRoleBindings
+            .Where(candidate => candidate.PrincipalId == principal.PrincipalId)
+            .OrderBy(candidate => candidate.RoleId)
+            .ToListAsync();
+        Assert.Equal(2, bindings.Count);
+        Assert.Equal("roles.workloads.contact-service.v1", bindings[0].RoleId);
+        Assert.Null(bindings[0].ResourcePath);
+        Assert.Null(bindings[0].ExpiresAt);
+        Assert.Equal("roles.workloads.contact-service.v1.upload-contacts", bindings[1].RoleId);
+        Assert.Equal("folders/contacts", bindings[1].ResourcePath);
+        Assert.Null(bindings[1].ExpiresAt);
+
+        var roles = await db.Roles
+            .Include(candidate => candidate.RolePermissions)
+            .Where(candidate => bindings.Select(binding => binding.RoleId).Contains(candidate.RoleId))
+            .OrderBy(candidate => candidate.RoleId)
+            .ToListAsync();
+        Assert.Equal(2, roles.Count);
+        Assert.Equal("contact-service workload v1", roles[0].RoleName);
+        Assert.Equal(["country.countries.read"], roles[0].RolePermissions.Select(item => item.PermissionId));
+        Assert.Equal("contact-service workload v1 upload-contacts", roles[1].RoleName);
+        Assert.Equal(
+            ["upload.files.delete", "upload.files.download", "upload.files.upload"],
+            roles[1].RolePermissions.Select(item => item.PermissionId).Order());
+        Assert.All(roles, role =>
+        {
+            Assert.Equal("iam", role.ServiceName);
+            Assert.Equal("Server-owned least-privilege workload role.", role.Description);
+            Assert.False(role.IsCustom);
+        });
+        Assert.Empty(await db.PrincipalPermissionBindings.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        Assert.Empty(await db.ServiceAccountApiKeys.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        Assert.Single(await db.WorkloadProvisioningOperations.Where(candidate => candidate.OperationId == operationId).ToListAsync());
+
+        using var scope = Factory.Services.CreateScope();
+        var resolver = scope.ServiceProvider.GetRequiredService<IPermissionResolver>();
+        Assert.True((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString(),
+            PermissionId = "country.countries.read",
+            BypassCache = true
+        })).Allowed);
+        Assert.False((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString(),
+            PermissionId = "upload.files.upload",
+            BypassCache = true
+        })).Allowed);
+        foreach (var resourcePath in new[] { "folders/contact", "folders/contacts-archive", "folders/other" })
+        {
+            Assert.False((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+            {
+                PrincipalId = principal.PrincipalId.ToString(),
+                PermissionId = "upload.files.upload",
+                ResourcePath = resourcePath,
+                BypassCache = true
+            })).Allowed);
+        }
+
+        foreach (var resourcePath in new[] { "folders/contacts", "folders/contacts/file-1", "folders/contacts/nested/file-2" })
+        {
+            Assert.True((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+            {
+                PrincipalId = principal.PrincipalId.ToString(),
+                PermissionId = "upload.files.upload",
+                ResourcePath = resourcePath,
+                BypassCache = true
+            })).Allowed);
+        }
+
+        var tokenAuthority = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString()
+        });
+        Assert.Equal(["country.countries.read"], tokenAuthority.Permissions);
+        Assert.Equal(["roles.workloads.contact-service.v1"], tokenAuthority.Roles);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("extra")]
+    [InlineData("wrong-path")]
+    [InlineData("expired")]
+    public async Task Put_ContactServiceReplayAfterScopedBindingDrift_ReturnsConflict(string drift)
+    {
+        await PrepareContactServiceAsync();
+        var operationId = Guid.NewGuid();
+        var principalId = await ProvisionContactServiceAsync(operationId);
+        await using (var db = Factory.CreateDbContext())
+        {
+            var scopedBinding = await db.PrincipalRoleBindings.SingleAsync(candidate =>
+                candidate.PrincipalId == principalId &&
+                candidate.RoleId == "roles.workloads.contact-service.v1.upload-contacts");
+            switch (drift)
+            {
+                case "missing":
+                    db.PrincipalRoleBindings.Remove(scopedBinding);
+                    break;
+                case "extra":
+                    db.PrincipalRoleBindings.Add(new PrincipalRoleBinding
+                    {
+                        BindingId = Guid.NewGuid(),
+                        PrincipalId = principalId,
+                        RoleId = "roles.workloads.contact-service.v1",
+                        ResourcePath = "folders/unexpected",
+                        GrantedBy = ActorId
+                    });
+                    break;
+                case "wrong-path":
+                    scopedBinding.ResourcePath = "folders/other";
+                    break;
+                case "expired":
+                    scopedBinding.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
+                    break;
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/contact-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId });
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_ContactServiceReplayAfterScopedRolePermissionDrift_ReturnsConflict()
+    {
+        await PrepareContactServiceAsync();
+        var operationId = Guid.NewGuid();
+        await ProvisionContactServiceAsync(operationId);
+        await using (var db = Factory.CreateDbContext())
+        {
+            var permission = await db.RolePermissions.SingleAsync(candidate =>
+                candidate.RoleId == "roles.workloads.contact-service.v1.upload-contacts" &&
+                candidate.PermissionId == "upload.files.delete");
+            db.RolePermissions.Remove(permission);
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/contact-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId });
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
     }
 
     [Fact]
@@ -865,6 +1057,25 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         await SeedDirectAuthorityAsync("iam.workload-principals.provision");
     }
 
+    private async Task PrepareContactServiceAsync()
+    {
+        await CleanDatabaseAsync();
+        foreach (var permissionId in new[]
+                 {
+                     "country.countries.read",
+                     "upload.files.upload",
+                     "upload.files.download",
+                     "upload.files.delete",
+                     "iam.workload-principals.provision"
+                 })
+        {
+            await SeedPermissionAsync(permissionId);
+        }
+
+        await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
+    }
+
     private async Task SeedDirectAuthorityAsync(string permissionId, Guid? principalId = null)
     {
         await using var db = Factory.CreateDbContext();
@@ -900,6 +1111,17 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         var response = await _employeeClient.PutAsJsonAsync(
             "/iam/v1/workload-principals/auth-service",
             new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId ?? Guid.NewGuid() });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        Assert.NotNull(result);
+        return result.PrincipalId;
+    }
+
+    private async Task<Guid> ProvisionContactServiceAsync(Guid operationId)
+    {
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/contact-service",
+            new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
         Assert.NotNull(result);

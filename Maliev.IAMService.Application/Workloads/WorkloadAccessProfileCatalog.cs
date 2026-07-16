@@ -1,4 +1,17 @@
+using Maliev.IAMService.Application.Validators;
+
 namespace Maliev.IAMService.Application.Workloads;
+
+/// <summary>
+/// Describes one additional resource-scoped role grant in a workload profile.
+/// </summary>
+/// <param name="RoleId">Canonical server-owned role identifier.</param>
+/// <param name="ResourcePath">Exact hierarchical resource root for the grant.</param>
+/// <param name="Permissions">Exact permissions assigned within the resource root.</param>
+public sealed record WorkloadAccessGrant(
+    string RoleId,
+    string ResourcePath,
+    IReadOnlyList<string> Permissions);
 
 /// <summary>
 /// Describes a versioned, server-owned workload access profile.
@@ -11,13 +24,20 @@ public sealed record WorkloadAccessProfile(
     string WorkloadId,
     int Version,
     string RoleId,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions)
+{
+    /// <summary>Gets the additional resource-scoped grants owned by this profile.</summary>
+    public IReadOnlyList<WorkloadAccessGrant> AdditionalGrants { get; init; } = [];
+}
 
 /// <summary>
 /// Validated catalog of server-owned workload access profiles.
 /// </summary>
 public sealed class WorkloadAccessProfileCatalog
 {
+    private const int MaximumRoleIdLength = 255;
+    private const int MaximumResourcePathLength = 500;
+    private const int MaximumWorkloadIdLength = 100;
     private readonly IReadOnlyDictionary<(string WorkloadId, int Version), WorkloadAccessProfile> _profiles;
 
     /// <summary>Gets the production profile catalog.</summary>
@@ -27,7 +47,21 @@ public sealed class WorkloadAccessProfileCatalog
             "auth-service",
             1,
             "roles.workloads.auth-service.v1",
-            ["iam.auth.resolve-permissions"])
+            ["iam.auth.resolve-permissions"]),
+        new WorkloadAccessProfile(
+            "contact-service",
+            1,
+            "roles.workloads.contact-service.v1",
+            ["country.countries.read"])
+        {
+            AdditionalGrants =
+            [
+                new WorkloadAccessGrant(
+                    "roles.workloads.contact-service.v1.upload-contacts",
+                    "folders/contacts",
+                    ["upload.files.upload", "upload.files.download", "upload.files.delete"])
+            ]
+        }
     ]);
 
     /// <summary>Initializes and validates a catalog.</summary>
@@ -38,10 +72,21 @@ public sealed class WorkloadAccessProfileCatalog
         var validated = new Dictionary<(string, int), WorkloadAccessProfile>();
         foreach (var profile in profiles)
         {
-            Validate(profile);
-            if (!validated.TryAdd((profile.WorkloadId, profile.Version), profile))
+            var additionalGrants = profile.AdditionalGrants
+                .Select(grant => grant with
+                {
+                    Permissions = Array.AsReadOnly(grant.Permissions.ToArray())
+                })
+                .ToArray();
+            var registeredProfile = profile with
             {
-                throw new ArgumentException($"Duplicate workload profile '{profile.WorkloadId}' version {profile.Version}.", nameof(profiles));
+                Permissions = Array.AsReadOnly(profile.Permissions.ToArray()),
+                AdditionalGrants = Array.AsReadOnly(additionalGrants)
+            };
+            Validate(registeredProfile);
+            if (!validated.TryAdd((registeredProfile.WorkloadId, registeredProfile.Version), registeredProfile))
+            {
+                throw new ArgumentException($"Duplicate workload profile '{registeredProfile.WorkloadId}' version {registeredProfile.Version}.", nameof(profiles));
             }
         }
 
@@ -60,9 +105,7 @@ public sealed class WorkloadAccessProfileCatalog
 
     private static void Validate(WorkloadAccessProfile profile)
     {
-        if (string.IsNullOrWhiteSpace(profile.WorkloadId) ||
-            profile.WorkloadId.Any(character => !(char.IsAsciiLetterOrDigit(character) || character == '-')) ||
-            !string.Equals(profile.WorkloadId, profile.WorkloadId.ToLowerInvariant(), StringComparison.Ordinal) ||
+        if (!IsCanonicalHyphenatedSegment(profile.WorkloadId, MaximumWorkloadIdLength) ||
             profile.Version <= 0 ||
             string.IsNullOrWhiteSpace(profile.RoleId) ||
             profile.Permissions.Count == 0)
@@ -77,9 +120,67 @@ public sealed class WorkloadAccessProfileCatalog
         }
 
         var expectedRoleId = $"roles.workloads.{profile.WorkloadId}.v{profile.Version}";
-        if (!string.Equals(profile.RoleId, expectedRoleId, StringComparison.Ordinal))
+        if (profile.RoleId.Length > MaximumRoleIdLength ||
+            !string.Equals(profile.RoleId, expectedRoleId, StringComparison.Ordinal))
         {
             throw new ArgumentException($"Workload profile role must be the canonical server-owned role '{expectedRoleId}'.", nameof(profile));
         }
+
+        ValidatePermissions(profile.Permissions, nameof(profile));
+        var roleIds = new HashSet<string>(StringComparer.Ordinal) { profile.RoleId };
+        var scopedAuthority = new HashSet<(string ResourcePath, string Permission)>();
+        foreach (var grant in profile.AdditionalGrants)
+        {
+            var expectedPrefix = $"{profile.RoleId}.";
+            var suffix = grant.RoleId.StartsWith(expectedPrefix, StringComparison.Ordinal)
+                ? grant.RoleId[expectedPrefix.Length..]
+                : string.Empty;
+            if (!IsCanonicalHyphenatedSegment(suffix, MaximumRoleIdLength) ||
+                grant.RoleId.Length > MaximumRoleIdLength ||
+                !roleIds.Add(grant.RoleId))
+            {
+                throw new ArgumentException("Additional workload roles must use a unique canonical suffix owned by the base role.", nameof(profile));
+            }
+
+            if (!IsCanonicalResourcePath(grant.ResourcePath))
+            {
+                throw new ArgumentException("Additional workload grants require a canonical non-global resource path.", nameof(profile));
+            }
+
+            ValidatePermissions(grant.Permissions, nameof(profile));
+            foreach (var permission in grant.Permissions)
+            {
+                if (profile.Permissions.Contains(permission, StringComparer.Ordinal) ||
+                    !scopedAuthority.Add((grant.ResourcePath, permission)))
+                {
+                    throw new ArgumentException("Additional workload grants cannot duplicate global or scoped authority.", nameof(profile));
+                }
+            }
+        }
     }
+
+    private static void ValidatePermissions(IReadOnlyList<string> permissions, string parameterName)
+    {
+        if (permissions.Count == 0 ||
+            permissions.Any(permission => !PermissionFormatValidator.IsValid(permission) || permission.Contains('*', StringComparison.Ordinal)) ||
+            permissions.Distinct(StringComparer.Ordinal).Count() != permissions.Count)
+        {
+            throw new ArgumentException("Workload grants require unique canonical non-wildcard permissions.", parameterName);
+        }
+    }
+
+    private static bool IsCanonicalResourcePath(string resourcePath) =>
+        !string.IsNullOrWhiteSpace(resourcePath) &&
+        resourcePath.Length <= MaximumResourcePathLength &&
+        !resourcePath.Contains('*', StringComparison.Ordinal) &&
+        resourcePath.Split('/').All(segment => IsCanonicalHyphenatedSegment(segment, MaximumResourcePathLength));
+
+    private static bool IsCanonicalHyphenatedSegment(string value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length <= maximumLength &&
+        char.IsAsciiLetterOrDigit(value[0]) &&
+        char.IsAsciiLetterOrDigit(value[^1]) &&
+        !value.Contains("--", StringComparison.Ordinal) &&
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character == '-') &&
+        string.Equals(value, value.ToLowerInvariant(), StringComparison.Ordinal);
 }

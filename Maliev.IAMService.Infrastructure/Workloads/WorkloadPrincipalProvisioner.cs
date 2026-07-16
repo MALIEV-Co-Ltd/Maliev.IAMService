@@ -61,11 +61,12 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         }
 
         ValidateRuntimeProfile(profile);
+        var grants = GetExpectedGrants(profile);
         var requestHash = ComputeRequestHash(workloadId, request.ProfileVersion);
 
         var strategy = _dbContext.Database.CreateExecutionStrategy();
         var response = await strategy.ExecuteAsync(
-            () => ProvisionTransactionAsync(workloadId, request, performedBy, profile, requestHash, cancellationToken));
+            () => ProvisionTransactionAsync(workloadId, request, performedBy, profile, grants, requestHash, cancellationToken));
         await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPermissions(response.PrincipalId), cancellationToken);
         return response;
     }
@@ -75,6 +76,7 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         ProvisionWorkloadPrincipalRequest request,
         Guid performedBy,
         WorkloadAccessProfile profile,
+        IReadOnlyList<ExpectedWorkloadGrant> grants,
         string requestHash,
         CancellationToken cancellationToken)
     {
@@ -132,6 +134,7 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
                 priorOperation.PrincipalId,
                 workloadId,
                 profile,
+                grants,
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return CreateResponse(profile, priorOperation.PrincipalId);
@@ -166,40 +169,49 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             _dbContext.Principals.Add(principal);
         }
 
-        var missingPermissions = await _dbContext.Permissions
-            .Where(permission => profile.Permissions.Contains(permission.PermissionId))
+        var expectedPermissionIds = grants
+            .SelectMany(grant => grant.Permissions)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var registeredPermissionIds = await _dbContext.Permissions
+            .Where(permission => expectedPermissionIds.Contains(permission.PermissionId))
             .Select(permission => permission.PermissionId)
             .ToListAsync(cancellationToken);
-        if (missingPermissions.Count != profile.Permissions.Count)
+        if (registeredPermissionIds.Count != expectedPermissionIds.Length)
         {
             throw new WorkloadProvisioningConflictException("The workload profile references permissions that are not registered.");
         }
 
-        var role = await _dbContext.Roles
+        var expectedRoleIds = grants.Select(grant => grant.RoleId).ToArray();
+        var roles = await _dbContext.Roles
             .Include(candidate => candidate.RolePermissions)
-            .SingleOrDefaultAsync(candidate => candidate.RoleId == profile.RoleId, cancellationToken);
-        if (role is null)
+            .Where(candidate => expectedRoleIds.Contains(candidate.RoleId))
+            .ToDictionaryAsync(candidate => candidate.RoleId, StringComparer.Ordinal, cancellationToken);
+        foreach (var grant in grants)
         {
-            role = new Role
+            if (!roles.TryGetValue(grant.RoleId, out var role))
             {
-                RoleId = profile.RoleId,
-                RoleName = GetExpectedRoleName(profile),
-                ServiceName = "iam",
-                Description = ManagedRoleDescription,
-                IsCustom = false,
-                CreatedBy = performedBy,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                RolePermissions = profile.Permissions
-                    .Select(permission => new RolePermission { RoleId = profile.RoleId, PermissionId = permission })
-                    .ToList()
-            };
-            _dbContext.Roles.Add(role);
-        }
-        else if (!HasExpectedManagedRoleMetadata(role, profile) ||
-                 !role.RolePermissions.Select(item => item.PermissionId).Order().SequenceEqual(profile.Permissions.Order()))
-        {
-            throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
+                role = new Role
+                {
+                    RoleId = grant.RoleId,
+                    RoleName = GetExpectedRoleName(profile, grant.RoleId),
+                    ServiceName = "iam",
+                    Description = ManagedRoleDescription,
+                    IsCustom = false,
+                    CreatedBy = performedBy,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    RolePermissions = grant.Permissions
+                        .Select(permission => new RolePermission { RoleId = grant.RoleId, PermissionId = permission })
+                        .ToList()
+                };
+                _dbContext.Roles.Add(role);
+            }
+            else if (!HasExpectedManagedRoleMetadata(role, profile, grant.RoleId) ||
+                     !HasExactPermissions(role, grant.Permissions))
+            {
+                throw new WorkloadProvisioningConflictException("A server-owned workload role has drifted from its declared profile.");
+            }
         }
 
         var directBindingExists = await _dbContext.PrincipalPermissionBindings
@@ -219,21 +231,29 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         var bindings = await _dbContext.PrincipalRoleBindings
             .Where(candidate => candidate.PrincipalId == principal.PrincipalId)
             .ToListAsync(cancellationToken);
-        if (bindings.Count > 1 || bindings.Any(binding =>
-                binding.RoleId != profile.RoleId ||
-                binding.ResourcePath is not null ||
-                binding.ExpiresAt is not null))
+        var expectedBindingKeys = grants
+            .Select(grant => (grant.RoleId, grant.ResourcePath))
+            .ToHashSet();
+        var existingBindingKeys = bindings
+            .Select(binding => (binding.RoleId, binding.ResourcePath))
+            .ToHashSet();
+        if (bindings.Count > grants.Count ||
+            existingBindingKeys.Count != bindings.Count ||
+            bindings.Any(binding =>
+                binding.ExpiresAt is not null ||
+                !expectedBindingKeys.Contains((binding.RoleId, binding.ResourcePath))))
         {
             throw new WorkloadProvisioningConflictException("The workload principal has authority outside its exact declared profile.");
         }
 
-        if (bindings.Count == 0)
+        foreach (var grant in grants.Where(grant => !existingBindingKeys.Contains((grant.RoleId, grant.ResourcePath))))
         {
             _dbContext.PrincipalRoleBindings.Add(new PrincipalRoleBinding
             {
                 BindingId = Guid.NewGuid(),
                 PrincipalId = principal.PrincipalId,
-                RoleId = profile.RoleId,
+                RoleId = grant.RoleId,
+                ResourcePath = grant.ResourcePath,
                 GrantedBy = performedBy,
                 GrantedAt = DateTime.UtcNow
             });
@@ -267,7 +287,11 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
 
     private static void ValidateRuntimeProfile(WorkloadAccessProfile profile)
     {
-        if (profile.RoleId == "roles.platform.owner" || profile.Permissions.Any(permission => permission.Contains('*', StringComparison.Ordinal)))
+        var grants = GetExpectedGrants(profile);
+        if (grants.Any(grant =>
+                string.Equals(grant.RoleId, "roles.platform.owner", StringComparison.OrdinalIgnoreCase) ||
+                grant.Permissions.Any(permission => permission.Contains('*', StringComparison.Ordinal)) ||
+                (grant.ResourcePath is not null && grant.ResourcePath.Contains('*', StringComparison.Ordinal))))
         {
             throw new WorkloadProvisioningConflictException("Unsafe workload profiles cannot be provisioned.");
         }
@@ -277,6 +301,7 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         Guid principalId,
         string workloadId,
         WorkloadAccessProfile profile,
+        IReadOnlyList<ExpectedWorkloadGrant> grants,
         CancellationToken cancellationToken)
     {
         var principal = await _dbContext.Principals
@@ -290,25 +315,36 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             throw new WorkloadProvisioningConflictException("The recorded workload principal is missing, inactive, or has immutable identity drift.");
         }
 
-        var role = await _dbContext.Roles
+        var expectedRoleIds = grants.Select(grant => grant.RoleId).ToArray();
+        var roles = await _dbContext.Roles
             .AsNoTracking()
             .Include(candidate => candidate.RolePermissions)
-            .SingleOrDefaultAsync(candidate => candidate.RoleId == profile.RoleId, cancellationToken);
-        if (role is null ||
-            !HasExpectedManagedRoleMetadata(role, profile) ||
-            !role.RolePermissions.Select(permission => permission.PermissionId).Order().SequenceEqual(profile.Permissions.Order()))
+            .Where(candidate => expectedRoleIds.Contains(candidate.RoleId))
+            .ToListAsync(cancellationToken);
+        if (roles.Count != grants.Count || grants.Any(grant =>
+                roles.SingleOrDefault(role => role.RoleId == grant.RoleId) is not { } role ||
+                !HasExpectedManagedRoleMetadata(role, profile, grant.RoleId) ||
+                !HasExactPermissions(role, grant.Permissions)))
         {
-            throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
+            throw new WorkloadProvisioningConflictException("A server-owned workload role has drifted from its declared profile.");
         }
 
         var bindings = await _dbContext.PrincipalRoleBindings
             .AsNoTracking()
             .Where(binding => binding.PrincipalId == principalId)
             .ToListAsync(cancellationToken);
-        if (bindings.Count != 1 ||
-            bindings[0].RoleId != profile.RoleId ||
-            bindings[0].ResourcePath is not null ||
-            bindings[0].ExpiresAt is not null)
+        var expectedBindingKeys = grants
+            .Select(grant => (grant.RoleId, grant.ResourcePath))
+            .ToHashSet();
+        var actualBindingKeys = bindings
+            .Select(binding => (binding.RoleId, binding.ResourcePath))
+            .ToHashSet();
+        if (bindings.Count != grants.Count ||
+            actualBindingKeys.Count != bindings.Count ||
+            !actualBindingKeys.SetEquals(expectedBindingKeys) ||
+            bindings.Any(binding =>
+                binding.ExpiresAt is not null ||
+                !expectedBindingKeys.Contains((binding.RoleId, binding.ResourcePath))))
         {
             throw new WorkloadProvisioningConflictException("The workload principal binding has drifted from its exact declared profile.");
         }
@@ -333,21 +369,51 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
     private static string ComputeRequestHash(string workloadId, int version) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{workloadId}\n{version}"))).ToLowerInvariant();
 
-    private static bool HasExpectedManagedRoleMetadata(Role role, WorkloadAccessProfile profile) =>
-        string.Equals(role.RoleId, profile.RoleId, StringComparison.Ordinal) &&
+    private static bool HasExpectedManagedRoleMetadata(Role role, WorkloadAccessProfile profile, string roleId) =>
+        string.Equals(role.RoleId, roleId, StringComparison.Ordinal) &&
         !role.IsCustom &&
         string.Equals(role.ServiceName, "iam", StringComparison.Ordinal) &&
-        string.Equals(role.RoleName, GetExpectedRoleName(profile), StringComparison.Ordinal) &&
+        string.Equals(role.RoleName, GetExpectedRoleName(profile, roleId), StringComparison.Ordinal) &&
         string.Equals(role.Description, ManagedRoleDescription, StringComparison.Ordinal);
 
-    private static string GetExpectedRoleName(WorkloadAccessProfile profile) =>
-        $"{profile.WorkloadId} workload v{profile.Version}";
+    private static bool HasExactPermissions(Role role, IReadOnlyList<string> permissions) =>
+        role.RolePermissions
+            .Select(permission => permission.PermissionId)
+            .Order(StringComparer.Ordinal)
+            .SequenceEqual(permissions.Order(StringComparer.Ordinal));
+
+    private static string GetExpectedRoleName(WorkloadAccessProfile profile, string roleId)
+    {
+        var baseName = $"{profile.WorkloadId} workload v{profile.Version}";
+        return string.Equals(roleId, profile.RoleId, StringComparison.Ordinal)
+            ? baseName
+            : $"{baseName} {roleId[(profile.RoleId.Length + 1)..]}";
+    }
+
+    private static IReadOnlyList<ExpectedWorkloadGrant> GetExpectedGrants(WorkloadAccessProfile profile) =>
+    [
+        new ExpectedWorkloadGrant(profile.RoleId, null, profile.Permissions),
+        .. profile.AdditionalGrants.Select(grant =>
+            new ExpectedWorkloadGrant(grant.RoleId, grant.ResourcePath, grant.Permissions))
+    ];
 
     private static WorkloadPrincipalResponse CreateResponse(WorkloadAccessProfile profile, Guid principalId) => new()
     {
         WorkloadId = profile.WorkloadId,
         PrincipalId = principalId,
         ProfileVersion = profile.Version,
-        RoleId = profile.RoleId
+        RoleId = profile.RoleId,
+        Bindings = GetExpectedGrants(profile)
+            .Select(grant => new WorkloadPrincipalBindingResponse
+            {
+                RoleId = grant.RoleId,
+                ResourcePath = grant.ResourcePath
+            })
+            .ToArray()
     };
+
+    private sealed record ExpectedWorkloadGrant(
+        string RoleId,
+        string? ResourcePath,
+        IReadOnlyList<string> Permissions);
 }
