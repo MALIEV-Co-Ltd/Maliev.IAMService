@@ -5,6 +5,7 @@ using System.Text.Json;
 using Maliev.Aspire.ServiceDefaults.IAM;
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
+using Maliev.IAMService.Application.Services;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Tests.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,7 @@ namespace Maliev.IAMService.Tests.Integration;
 public sealed class AspireIamRedisLivePermissionContractTests
 {
     private const string PermissionId = "project.projects.read";
-    private const string LogicalCacheKeyPrefix = "iam:principal:";
+    private const string LogicalCacheKeyPrefix = IamPermissionCacheKeys.PrincipalPrefix;
     private readonly RedisLivePermissionContractFactory _factory;
 
     /// <summary>Initializes the contract suite with its isolated real-Redis fixture.</summary>
@@ -53,6 +54,38 @@ public sealed class AspireIamRedisLivePermissionContractTests
         Assert.Single(transport.Requests);
         Assert.False(transport.Requests.Single().HasBypassCache);
         Assert.True(await _factory.CacheKeyExistsAsync(CacheKey(seeded.PrincipalId)));
+    }
+
+    /// <summary>
+    /// A wildcard snapshot left by a pre-hardening pod must not authorize a request after the v2 cutover.
+    /// </summary>
+    [Fact]
+    public async Task CheckPermission_PreHardeningRedisWildcard_IsIgnoredByVersionedNamespace()
+    {
+        await _factory.ResetContractStateAsync();
+        var seeded = await SeedAllowedPrincipalAsync();
+        await DeleteBindingWithoutCacheInvalidationAsync(seeded.BindingId);
+        var legacyKey = $"iam:principal:{seeded.PrincipalId}:permissions";
+        await _factory.SetCacheAsync(legacyKey, new ResolvePermissionsResponse
+        {
+            PrincipalId = seeded.PrincipalId,
+            Permissions = ["*"],
+            Roles = ["roles.platform.owner"],
+            FromCache = false
+        });
+        using var transport = CreateCapturedTransport();
+
+        using var response = await transport.Client.PostAsJsonAsync(
+            "/iam/v1/auth/check-permission",
+            Request(seeded.PrincipalId, bypassCache: false));
+        var result = await response.Content.ReadFromJsonAsync<CheckPermissionResponse>();
+
+        response.EnsureSuccessStatusCode();
+        Assert.NotNull(result);
+        Assert.False(result.Allowed);
+        Assert.False(result.FromCache);
+        Assert.True(await _factory.CacheKeyExistsAsync(legacyKey));
+        Assert.False(await _factory.CacheKeyExistsAsync(CacheKey(seeded.PrincipalId)));
     }
 
     /// <summary>

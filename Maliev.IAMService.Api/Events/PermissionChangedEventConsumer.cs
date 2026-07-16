@@ -33,7 +33,7 @@ public class PrincipalRoleGrantedEventConsumer : IConsumer<PrincipalRoleGrantedE
         var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
 
         // Invalidate all cache entries for this principal
-        await cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", context.CancellationToken);
+        await cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPrincipal(evt.PrincipalId), context.CancellationToken);
 
         _logger.LogInformation("Invalidated permission cache for principal {PrincipalId} after role {RoleId} granted",
             evt.PrincipalId, evt.RoleId);
@@ -69,7 +69,7 @@ public class PrincipalRoleRevokedEventConsumer : IConsumer<PrincipalRoleRevokedE
         var cacheService = scope.ServiceProvider.GetRequiredService<ICacheService>();
 
         // Invalidate all cache entries for this principal
-        await cacheService.RemoveByPrefixAsync($"iam:principal:{evt.PrincipalId}:", context.CancellationToken);
+        await cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPrincipal(evt.PrincipalId), context.CancellationToken);
 
         _logger.LogInformation("Invalidated permission cache for principal {PrincipalId} after role {RoleId} revoked",
             evt.PrincipalId, evt.RoleId);

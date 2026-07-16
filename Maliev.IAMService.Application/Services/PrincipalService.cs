@@ -1,7 +1,6 @@
 using Maliev.IAMService.Application.DTOs.Requests;
 using Maliev.IAMService.Application.DTOs.Responses;
 using Maliev.IAMService.Application.Interfaces;
-using Maliev.IAMService.Domain.Constants;
 using Maliev.IAMService.Domain.Entities;
 using Maliev.IAMService.Application.Workloads;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
@@ -187,54 +186,9 @@ public class PrincipalService : IPrincipalService
             principal = await _principalRepository.GetByEmailAsync(serviceEmail, cancellationToken);
         }
 
-        if (principal == null && principalId.StartsWith("system:service:", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Auto-registering system service principal: {PrincipalId}", principalId);
-            principal = new Principal
-            {
-                PrincipalId = Guid.NewGuid(),
-                PrincipalType = "system",
-                Email = $"{principalId.ToLowerInvariant()}@serviceaccount.maliev.local",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-            principal = await _principalRepository.CreateAsync(principal, cancellationToken);
-        }
-
-        if (principal != null && principal.PrincipalType == "system")
-        {
-            const string ownerRoleId = "roles.platform.owner";
-            var bindings = await _bindingRepository.GetByPrincipalAsync(principal.PrincipalId, cancellationToken);
-
-            if (!bindings.Any(b => b.RoleId == ownerRoleId))
-            {
-                _logger.LogDebug("Repairing system principal {PrincipalId}: Granting missing {RoleId}", principalId, ownerRoleId);
-
-                var ownerRole = await _roleRepository.GetByIdAsync(ownerRoleId, cancellationToken);
-                if (ownerRole != null)
-                {
-                    await _bindingRepository.CreateAsync(new PrincipalRoleBinding
-                    {
-                        BindingId = Guid.NewGuid(),
-                        PrincipalId = principal.PrincipalId,
-                        RoleId = ownerRoleId,
-                        ResourcePath = "*",
-                        GrantedAt = DateTime.UtcNow,
-                        GrantedBy = SystemConstants.SystemPrincipalId
-                    }, cancellationToken);
-                    _logger.LogInformation("Successfully repaired system principal {PrincipalId}", principalId);
-
-                    await _cacheService.RemoveAsync($"iam:principal:{principal.PrincipalId}:permissions", cancellationToken);
-                }
-                else
-                {
-                    _logger.LogWarning("Could not repair system principal {PrincipalId} because {RoleId} does not exist", principalId, ownerRoleId);
-                }
-            }
-        }
-
         if (principal == null)
         {
+            _logger.LogWarning("Rejected unresolved principal identifier {PrincipalId}", principalId);
             throw new InvalidOperationException($"Principal '{principalId}' could not be resolved to a GUID.");
         }
 
@@ -480,13 +434,7 @@ public class PrincipalService : IPrincipalService
         if (principal == null)
             throw new InvalidOperationException($"Principal {principalId} not found");
 
-        var cacheKey = $"iam:principal:{principalId}:permissions";
-        if (!string.IsNullOrEmpty(resourcePath))
-        {
-            var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(resourcePath.ToLowerInvariant()));
-            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-            cacheKey += $":path:{hash}";
-        }
+        var cacheKey = IamPermissionCacheKeys.ForPermissions(principalId, resourcePath);
 
         var cached = await _cacheService.GetAsync<EffectivePermissionsResponse>(cacheKey, cancellationToken);
         if (cached != null)

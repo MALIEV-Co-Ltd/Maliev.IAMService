@@ -277,7 +277,7 @@ public class PermissionRegistrationRequestConsumer : IConsumer<PermissionRegistr
             // Invalidate cache for each principal
             foreach (var principalId in principalIds)
             {
-                var cacheKey = $"iam:principal:{principalId}:permissions";
+                var cacheKey = IamPermissionCacheKeys.ForPermissions(principalId);
                 await _cacheService.RemoveAsync(cacheKey, cancellationToken);
             }
 

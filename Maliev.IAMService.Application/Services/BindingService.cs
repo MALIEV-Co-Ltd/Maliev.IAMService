@@ -127,7 +127,7 @@ public class BindingService : IBindingService
 
         var created = await _bindingRepository.CreateAsync(binding, cancellationToken);
 
-        await _cacheService.RemoveByPrefixAsync($"iam:principal:{principalId}:", cancellationToken);
+        await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPrincipal(principalId), cancellationToken);
 
         await _auditService.LogAsync("GRANT_ROLE", performedBy, new Dictionary<string, object>
         {
@@ -187,7 +187,7 @@ public class BindingService : IBindingService
 
         await _bindingRepository.DeleteAsync(bindingId, cancellationToken);
 
-        await _cacheService.RemoveByPrefixAsync($"iam:principal:{principalId}:", cancellationToken);
+        await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPrincipal(principalId), cancellationToken);
 
         await _auditService.LogAsync("REVOKE_ROLE", performedBy, new Dictionary<string, object>
         {

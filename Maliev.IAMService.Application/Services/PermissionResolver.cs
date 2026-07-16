@@ -97,7 +97,7 @@ public class PermissionResolver : IPermissionResolver
         var principal = await _principalService.GetByIdAsync(principalGuid, cancellationToken);
         if (principal is null || !principal.IsActive)
         {
-            await _cacheService.RemoveByPrefixAsync($"iam:principal:{principalGuid}:permissions", cancellationToken);
+            await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPermissions(principalGuid), cancellationToken);
             return new ResolvePermissionsResponse
             {
                 PrincipalId = principalGuid,
@@ -270,15 +270,6 @@ public class PermissionResolver : IPermissionResolver
     /// <param name="principalId">The principal ID.</param>
     /// <param name="resourcePath">Optional hierarchical resource path for scoping.</param>
     /// <returns>Redis cache key string.</returns>
-    private string GetCacheKey(Guid principalId, string? resourcePath)
-    {
-        var key = $"iam:principal:{principalId}:permissions";
-        if (!string.IsNullOrEmpty(resourcePath))
-        {
-            var hashBytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(resourcePath.ToLowerInvariant()));
-            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-            key += $":path:{hash}";
-        }
-        return key;
-    }
+    private static string GetCacheKey(Guid principalId, string? resourcePath) =>
+        IamPermissionCacheKeys.ForPermissions(principalId, resourcePath);
 }

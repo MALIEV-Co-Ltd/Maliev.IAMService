@@ -219,11 +219,8 @@ public class PrincipalsController : ControllerBase
     /// permissions regardless of which path wins the race.  See IntranetBff/Program.cs
     /// OnTicketReceived for the matching comment.
     ///
-    /// ⚠ SYSTEM PRINCIPAL FILTER — the join on PrincipalType == "user" is NOT optional.
-    /// PrincipalService auto-grants roles.platform.owner to every "system" service principal
-    /// at startup.  Without this filter, those bindings would make platformOwnerExists = true
-    /// and this endpoint would always return 400 even on a fresh DB, preventing the first
-    /// human user from ever gaining permissions.
+    /// The owner check is intentionally restricted to human users. Workload principals are
+    /// separately provisioned with exact least-privilege roles and never participate in bootstrap.
     /// </remarks>
     [HttpPost("bootstrap/promote")]
     [AllowAnonymous]

@@ -35,7 +35,7 @@ public class RoleUpdatedEventConsumer : IConsumer<RoleUpdatedEvent>
         // When a role is updated, we need to invalidate cache for ALL principals
         // This is a broad invalidation but ensures consistency
         // In production, you might track which principals have this role and invalidate selectively
-        await cacheService.RemoveByPrefixAsync("iam:principal:", context.CancellationToken);
+        await cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.PrincipalPrefix, context.CancellationToken);
 
         _logger.LogWarning("Invalidated ALL principal permission caches after role {RoleId} was updated", evt.RoleId);
     }

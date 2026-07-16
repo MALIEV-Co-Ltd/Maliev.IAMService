@@ -1,4 +1,5 @@
 using Maliev.IAMService.Infrastructure.Persistence;
+using Maliev.IAMService.Application.Services;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -48,6 +49,10 @@ public sealed class RedisLivePermissionContractFactory : TestWebApplicationFacto
         var redis = Services.GetRequiredService<IConnectionMultiplexer>();
         return await redis.GetDatabase().KeyExistsAsync(CacheInstanceName + logicalKey);
     }
+
+    /// <summary>Stores a logical IAM cache value through the production serializer and Redis namespace.</summary>
+    public Task SetCacheAsync<T>(string logicalKey, T value) =>
+        Services.GetRequiredService<ICacheService>().SetAsync(logicalKey, value, TimeSpan.FromMinutes(5));
 
     private async Task DeleteKeysAsync(RedisValue pattern)
     {

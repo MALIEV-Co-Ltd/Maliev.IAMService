@@ -66,7 +66,7 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         var strategy = _dbContext.Database.CreateExecutionStrategy();
         var response = await strategy.ExecuteAsync(
             () => ProvisionTransactionAsync(workloadId, request, performedBy, profile, requestHash, cancellationToken));
-        await _cacheService.RemoveByPrefixAsync($"iam:principal:{response.PrincipalId}:permissions", cancellationToken);
+        await _cacheService.RemoveByPrefixAsync(IamPermissionCacheKeys.ForPermissions(response.PrincipalId), cancellationToken);
         return response;
     }
 
