@@ -46,14 +46,13 @@ public sealed class WorkloadAccessProfileCatalogTests
         var profile = WorkloadAccessProfileCatalog.Default.Get("contact-service", 1);
 
         Assert.Equal("roles.workloads.contact-service.v1", profile.RoleId);
+        Assert.Equal(["country.countries.read"], profile.Permissions);
+        var grant = Assert.Single(profile.AdditionalGrants);
+        Assert.Equal("roles.workloads.contact-service.v1.upload-contacts", grant.RoleId);
+        Assert.Equal("folders/contacts", grant.ResourcePath);
         Assert.Equal(
-            [
-                "country.countries.read",
-                "upload.files.upload",
-                "upload.files.download",
-                "upload.files.delete"
-            ],
-            profile.Permissions);
+            ["upload.files.upload", "upload.files.download", "upload.files.delete"],
+            grant.Permissions);
     }
 
     [Fact]
@@ -75,4 +74,116 @@ public sealed class WorkloadAccessProfileCatalogTests
         var profile = catalog.Get("contact-service", 1);
         Assert.Equal(["country.countries.read"], profile.Permissions);
     }
+
+    [Fact]
+    public void Constructor_NestedGrantSourcesMutated_PreservesRegisteredProfile()
+    {
+        var grantPermissions = new List<string> { "upload.files.upload" };
+        var grants = new List<WorkloadAccessGrant>
+        {
+            new("roles.workloads.contact-service.v1.upload-contacts", "folders/contacts", grantPermissions)
+        };
+        var catalog = new WorkloadAccessProfileCatalog(
+        [
+            new WorkloadAccessProfile(
+                "contact-service",
+                1,
+                "roles.workloads.contact-service.v1",
+                ["country.countries.read"])
+            {
+                AdditionalGrants = grants
+            }
+        ]);
+
+        grantPermissions[0] = "upload.admin.all";
+        grants.Clear();
+
+        var profile = catalog.Get("contact-service", 1);
+        var grant = Assert.Single(profile.AdditionalGrants);
+        Assert.Equal(["upload.files.upload"], grant.Permissions);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("*")]
+    [InlineData("/folders/contacts")]
+    [InlineData("folders//contacts")]
+    [InlineData("folders/contacts/")]
+    [InlineData("folders/Contacts")]
+    public void Constructor_NonCanonicalAdditionalGrantPath_RejectsProfile(string? resourcePath)
+    {
+        var profile = CreateProfileWithGrant(
+            "roles.workloads.contact-service.v1.upload-contacts",
+            resourcePath!,
+            ["upload.files.upload"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
+    [Theory]
+    [InlineData("roles.workloads.contact-service.v1")]
+    [InlineData("roles.workloads.contact-service.v1.Upload")]
+    [InlineData("roles.workloads.contact-service.v1.upload.contacts")]
+    [InlineData("roles.workloads.other-service.v1.upload-contacts")]
+    [InlineData("roles.platform.owner")]
+    public void Constructor_NonCanonicalAdditionalGrantRole_RejectsProfile(string roleId)
+    {
+        var profile = CreateProfileWithGrant(roleId, "folders/contacts", ["upload.files.upload"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
+    [Fact]
+    public void Constructor_DuplicateOrGloballyGrantedAdditionalAuthority_RejectsProfile()
+    {
+        var duplicateRole = new WorkloadAccessProfile(
+            "contact-service",
+            1,
+            "roles.workloads.contact-service.v1",
+            ["country.countries.read"])
+        {
+            AdditionalGrants =
+            [
+                new("roles.workloads.contact-service.v1.upload-contacts", "folders/contacts", ["upload.files.upload"]),
+                new("roles.workloads.contact-service.v1.upload-contacts", "folders/archive", ["upload.files.delete"])
+            ]
+        };
+        var duplicatePermission = CreateProfileWithGrant(
+            "roles.workloads.contact-service.v1.upload-contacts",
+            "folders/contacts",
+            ["upload.files.upload", "upload.files.upload"]);
+        var globallyGrantedPermission = CreateProfileWithGrant(
+            "roles.workloads.contact-service.v1.country-contacts",
+            "folders/contacts",
+            ["country.countries.read"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([duplicateRole]));
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([duplicatePermission]));
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([globallyGrantedPermission]));
+    }
+
+    [Fact]
+    public void Constructor_WildcardAdditionalAuthority_RejectsProfile()
+    {
+        var profile = CreateProfileWithGrant(
+            "roles.workloads.contact-service.v1.upload-contacts",
+            "folders/contacts",
+            ["upload.files.*"]);
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([profile]));
+    }
+
+    private static WorkloadAccessProfile CreateProfileWithGrant(
+        string roleId,
+        string resourcePath,
+        IReadOnlyList<string> permissions) =>
+        new(
+            "contact-service",
+            1,
+            "roles.workloads.contact-service.v1",
+            ["country.countries.read"])
+        {
+            AdditionalGrants = [new WorkloadAccessGrant(roleId, resourcePath, permissions)]
+        };
 }

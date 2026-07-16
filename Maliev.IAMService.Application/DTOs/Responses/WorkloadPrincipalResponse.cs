@@ -14,4 +14,7 @@ public sealed record WorkloadPrincipalResponse
 
     /// <summary>Gets the exact bound role identifier.</summary>
     public required string RoleId { get; init; }
+
+    /// <summary>Gets all exact role bindings applied by the workload profile.</summary>
+    public IReadOnlyList<WorkloadPrincipalBindingResponse> Bindings { get; init; } = [];
 }
