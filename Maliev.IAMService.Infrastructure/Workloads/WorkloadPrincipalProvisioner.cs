@@ -17,6 +17,9 @@ namespace Maliev.IAMService.Infrastructure.Workloads;
 /// </summary>
 public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
 {
+    private const string ProvisionPermission = "iam.workload-principals.provision";
+    private const string PlatformOwnerRole = "roles.platform.owner";
+    private const string ManagedRoleDescription = "Server-owned least-privilege workload role.";
     private readonly IAMDbContext _dbContext;
     private readonly WorkloadAccessProfileCatalog _catalog;
     private readonly ICacheService _cacheService;
@@ -86,7 +89,30 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             .SingleOrDefaultAsync(candidate => candidate.PrincipalId == performedBy, cancellationToken);
         if (actor is null || !actor.IsActive || !string.Equals(actor.PrincipalType, "user", StringComparison.Ordinal))
         {
-            throw new WorkloadProvisioningConflictException("Provisioning requires an active employee IAM principal.");
+            throw new WorkloadProvisioningAuthorizationException("Provisioning requires an active employee IAM principal.");
+        }
+
+        var now = DateTime.UtcNow;
+        var hasDirectAuthority = await _dbContext.PrincipalPermissionBindings
+            .AsNoTracking()
+            .AnyAsync(binding =>
+                binding.PrincipalId == performedBy &&
+                binding.PermissionId == ProvisionPermission &&
+                (binding.ExpiresAt == null || binding.ExpiresAt > now) &&
+                (binding.ResourcePath == null || binding.ResourcePath == string.Empty || binding.ResourcePath == "*"),
+                cancellationToken);
+        var hasRoleAuthority = await _dbContext.PrincipalRoleBindings
+            .AsNoTracking()
+            .AnyAsync(binding =>
+                binding.PrincipalId == performedBy &&
+                binding.RoleId.ToLower() != PlatformOwnerRole &&
+                (binding.ExpiresAt == null || binding.ExpiresAt > now) &&
+                (binding.ResourcePath == null || binding.ResourcePath == string.Empty || binding.ResourcePath == "*") &&
+                binding.Role.RolePermissions.Any(permission => permission.PermissionId == ProvisionPermission),
+                cancellationToken);
+        if (!hasDirectAuthority && !hasRoleAuthority)
+        {
+            throw new WorkloadProvisioningAuthorizationException("Current persisted IAM authority is required to provision workload principals.");
         }
 
         var priorOperation = await _dbContext.WorkloadProvisioningOperations
@@ -157,9 +183,9 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             role = new Role
             {
                 RoleId = profile.RoleId,
-                RoleName = $"{workloadId} workload v{profile.Version}",
+                RoleName = GetExpectedRoleName(profile),
                 ServiceName = "iam",
-                Description = "Server-owned least-privilege workload role.",
+                Description = ManagedRoleDescription,
                 IsCustom = false,
                 CreatedBy = performedBy,
                 CreatedAt = DateTime.UtcNow,
@@ -170,7 +196,8 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             };
             _dbContext.Roles.Add(role);
         }
-        else if (!role.RolePermissions.Select(item => item.PermissionId).Order().SequenceEqual(profile.Permissions.Order()))
+        else if (!HasExpectedManagedRoleMetadata(role, profile) ||
+                 !role.RolePermissions.Select(item => item.PermissionId).Order().SequenceEqual(profile.Permissions.Order()))
         {
             throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
         }
@@ -263,13 +290,13 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             throw new WorkloadProvisioningConflictException("The recorded workload principal is missing, inactive, or has immutable identity drift.");
         }
 
-        var rolePermissions = await _dbContext.Roles
+        var role = await _dbContext.Roles
             .AsNoTracking()
-            .Where(role => role.RoleId == profile.RoleId)
-            .SelectMany(role => role.RolePermissions.Select(permission => permission.PermissionId))
-            .OrderBy(permission => permission)
-            .ToListAsync(cancellationToken);
-        if (!rolePermissions.SequenceEqual(profile.Permissions.Order()))
+            .Include(candidate => candidate.RolePermissions)
+            .SingleOrDefaultAsync(candidate => candidate.RoleId == profile.RoleId, cancellationToken);
+        if (role is null ||
+            !HasExpectedManagedRoleMetadata(role, profile) ||
+            !role.RolePermissions.Select(permission => permission.PermissionId).Order().SequenceEqual(profile.Permissions.Order()))
         {
             throw new WorkloadProvisioningConflictException("The server-owned workload role has drifted from its declared profile.");
         }
@@ -305,6 +332,16 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
 
     private static string ComputeRequestHash(string workloadId, int version) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{workloadId}\n{version}"))).ToLowerInvariant();
+
+    private static bool HasExpectedManagedRoleMetadata(Role role, WorkloadAccessProfile profile) =>
+        string.Equals(role.RoleId, profile.RoleId, StringComparison.Ordinal) &&
+        !role.IsCustom &&
+        string.Equals(role.ServiceName, "iam", StringComparison.Ordinal) &&
+        string.Equals(role.RoleName, GetExpectedRoleName(profile), StringComparison.Ordinal) &&
+        string.Equals(role.Description, ManagedRoleDescription, StringComparison.Ordinal);
+
+    private static string GetExpectedRoleName(WorkloadAccessProfile profile) =>
+        $"{profile.WorkloadId} workload v{profile.Version}";
 
     private static WorkloadPrincipalResponse CreateResponse(WorkloadAccessProfile profile, Guid principalId) => new()
     {

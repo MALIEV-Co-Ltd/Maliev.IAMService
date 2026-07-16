@@ -23,9 +23,12 @@ namespace Maliev.IAMService.Infrastructure.Migrations
                 SET performed_by = (
                     SELECT candidate.performed_by
                     FROM iamaudit_logs AS candidate
+                    INNER JOIN principals AS actor ON actor.principal_id = candidate.performed_by
                     WHERE candidate.action = 'PROVISION_WORKLOAD_PRINCIPAL'
                       AND candidate.principal_id = operation.principal_id
                       AND candidate.details LIKE '%' || operation.operation_id::text || '%'
+                      AND actor.is_active = TRUE
+                      AND actor.principal_type = 'user'
                     ORDER BY candidate.timestamp DESC
                     LIMIT 1
                 );
