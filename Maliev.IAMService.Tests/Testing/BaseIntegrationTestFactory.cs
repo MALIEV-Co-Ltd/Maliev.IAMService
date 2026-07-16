@@ -246,7 +246,9 @@ public class BaseIntegrationTestFactory<TProgram, TDbContext> : WebApplicationFa
             services.AddSingleton(statusTracker);
 
             // Configure JWT Bearer authentication with test RSA key
-            services.PostConfigureAll<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(options =>
+            services.PostConfigure<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>(
+                Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme,
+                options =>
             {
                 // Disable claim type mapping to keep original claim names like "sub" instead of URIs
                 options.MapInboundClaims = false;

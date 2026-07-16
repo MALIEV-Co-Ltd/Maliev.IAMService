@@ -73,6 +73,31 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Resolves effective permissions for AuthService token issuance using an isolated,
+    /// target-bound, short-lived asymmetric capability.
+    /// </summary>
+    /// <param name="request">The exact principal bound into the capability.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The authoritative permission and role response.</returns>
+    [HttpPost("token-issuance/resolve-permissions")]
+    [Authorize(Policy = TokenIssuanceCapabilityAuthentication.Policy)]
+    public async Task<IActionResult> ResolvePermissionsForTokenIssuance(
+        [FromBody] ResolvePermissionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TokenIssuanceCapabilityAuthentication.IsBoundToTarget(User, request.PrincipalId)
+            || request.ResourcePath is not null
+            || request.RequestTime.HasValue
+            || request.RequestIp is not null)
+        {
+            return Forbid(TokenIssuanceCapabilityAuthentication.Scheme);
+        }
+
+        var response = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Checks if a principal has a specific permission, optionally scoped to a resource.
     /// Includes latency tracking and supports hierarchical resource matching.
     /// Requires explicit permission-check access.
