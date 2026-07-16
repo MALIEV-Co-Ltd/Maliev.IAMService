@@ -4,11 +4,19 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Authorization;
 using Maliev.Aspire.ServiceDefaults.Authorization;
 using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Maliev.IAMService.Tests.Testing;
 
 public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAMDbContext>
 {
+    private const string CapabilityIssuer = "https://auth.test.maliev.com";
+    private const string CapabilityAudience = "https://iam.test.maliev.com/auth/token-issuance";
+    private const string CapabilityKeyId = "auth-capability-test-key";
+    private static readonly RSA CapabilitySigningKey = RSA.Create(2048);
     private static readonly string[] AllPermissions =
     [
         "iam.principals.create", "iam.principals.read", "iam.principals.update",
@@ -31,6 +39,16 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
 
     protected override string DbConnectionStringName => "IamDbContext";
 
+    public TestWebApplicationFactory()
+    {
+        Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__Issuer", CapabilityIssuer);
+        Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__Audience", CapabilityAudience);
+        Environment.SetEnvironmentVariable("IAM__TokenIssuanceCapability__MaximumLifetimeSeconds", "60");
+        Environment.SetEnvironmentVariable(
+            $"IAM__TokenIssuanceCapability__PublicKeys__{CapabilityKeyId}",
+            Convert.ToBase64String(CapabilitySigningKey.ExportSubjectPublicKeyInfo()));
+    }
+
     /// <summary>Gets the PostgreSQL connection string for isolated schema migration tests.</summary>
     public string MigrationTestConnectionString => PostgreSqlConnectionString;
 
@@ -41,6 +59,59 @@ public class TestWebApplicationFactory : BaseIntegrationTestFactory<Program, IAM
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddAuthorizationBuilder();
+
+        services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            options.MapInboundClaims = false;
+        });
+    }
+
+    /// <summary>Creates an Auth-issued token-issuance capability for integration tests.</summary>
+    public string CreateTokenIssuanceCapability(
+        Guid targetPrincipalId,
+        Action<List<Claim>>? mutateClaims = null,
+        string? issuer = null,
+        string? audience = null,
+        string? keyId = CapabilityKeyId,
+        DateTime? notBefore = null,
+        DateTime? expires = null,
+        SigningCredentials? signingCredentials = null)
+    {
+        var now = DateTime.UtcNow;
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, "urn:maliev:service:auth"),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("D")),
+            new(JwtRegisteredClaimNames.Iat, new DateTimeOffset(now).ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+            new("service_name", "AuthService"),
+            new("client_id", "auth-service"),
+            new("user_type", "service"),
+            new("purpose", "iam.permission-resolution"),
+            new("target_principal_id", targetPrincipalId.ToString("D")),
+            new("permissions", "iam.auth.resolve-permissions")
+        };
+        mutateClaims?.Invoke(claims);
+
+        var credentials = signingCredentials ?? new SigningCredentials(
+            new RsaSecurityKey(CapabilitySigningKey) { KeyId = CapabilityKeyId },
+            SecurityAlgorithms.RsaSha256);
+        var token = new JwtSecurityToken(
+            issuer ?? CapabilityIssuer,
+            audience ?? CapabilityAudience,
+            claims,
+            notBefore ?? now.AddSeconds(-1),
+            expires ?? now.AddSeconds(30),
+            credentials);
+        if (keyId is null)
+        {
+            token.Header.Remove(JwtHeaderParameterNames.Kid);
+        }
+        else
+        {
+            token.Header[JwtHeaderParameterNames.Kid] = keyId;
+        }
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     /// <summary>
