@@ -118,6 +118,17 @@ public sealed class WorkloadAccessProfileCatalogTests
     }
 
     [Fact]
+    public void Get_CurrencyServiceVersionOne_ReturnsOnlyLivePermissionCheckAuthority()
+    {
+        var profile = WorkloadAccessProfileCatalog.Default.Get("currency-service", 1);
+
+        Assert.Equal("roles.workloads.currency-service.v1", profile.RoleId);
+        Assert.Equal(["iam.auth.check-permission"], profile.Permissions);
+        Assert.Empty(profile.AdditionalGrants);
+        Assert.DoesNotContain("iam.auth.resolve-permissions", profile.Permissions);
+    }
+
+    [Fact]
     public void Constructor_SourcePermissionListMutated_PreservesRegisteredProfile()
     {
         var permissions = new List<string> { "country.countries.read" };
