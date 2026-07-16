@@ -93,7 +93,7 @@ public class AuthController : ControllerBase
             return Forbid(TokenIssuanceCapabilityAuthentication.Scheme);
         }
 
-        var response = await _permissionResolver.ResolvePermissionsAsync(request, cancellationToken);
+        var response = await _permissionResolver.ResolvePermissionsForTokenIssuanceAsync(request, cancellationToken);
         return Ok(response);
     }
 

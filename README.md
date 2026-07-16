@@ -133,6 +133,7 @@ All endpoints are prefixed with `/iam/v1/`.
 |--------|----------|-------------|
 | POST | `/auth/check-permission` | Verify if a principal has a specific permission. Requires `iam.auth.check-permission`. |
 | POST | `/auth/resolve-permissions` | Resolve effective permissions. Requires `iam.auth.resolve-permissions`. |
+| POST | `/auth/token-issuance/resolve-permissions` | Resolve current permissions for Auth token issuance using a target-bound RS256 capability. |
 | POST | `/permissions/register` | Register service permissions. Requires `iam.permissions.create`. |
 | POST | `/roles/register` | Register service roles. Requires `iam.roles.create`. |
 | GET | `/principals/bootstrap/status` | Public first-user bootstrap status only. Does not expose role or binding data. |
@@ -160,6 +161,12 @@ The credential is independent from the fleet JWT signing key. Inject the plainte
 IAM first enforces a global per-pod concurrency cap of eight, then a 120-per-minute target-principal sliding window, then a 3,000-per-minute service sliding window by default. All queues are disabled. Concurrency rejection therefore consumes no service or target rate capacity, and a saturated target cannot drain capacity shared by other targets. Target-principal partitions are hashed, internal-only, idle-pruned, and capped at 4,096 entries per pod; target identifiers never become metric tags. Capacity exhaustion returns `429 application/problem+json` with an integer `Retry-After` header. Configure the allowlist, credential hashes, and bounds under `IAM:LivePermissionChecks`; ordinary `bypassCache: false` checks do not enter these limiters.
 
 OpenTelemetry instruments `iam.live_permission_checks`, `iam.live_permission_checks.in_flight`, and `iam.live_permission_check.duration` with only the bounded `cache_mode`, `outcome`, and allowlisted `caller_service` tags.
+
+### Auth Token-Issuance Capability Activation Gate
+
+The additive `/iam/v1/auth/token-issuance/resolve-permissions` route is disabled by fail-closed trust configuration until all of the following are supplied under `IAM:TokenIssuanceCapability`: a canonical HTTPS `Issuer`, a canonical HTTPS `Audience`, a `MaximumLifetimeSeconds` value from 15 through 60, and at least one RSA public key under `PublicKeys:{kid}`. IAM accepts RS256 only, requires the configured key ID, and never receives Auth's private signing key.
+
+Do not activate this configuration in an environment until Auth issues the documented exact service identity, purpose, permission, target-principal, audience, identifier, and time-window claims; its workload identity has only `iam.auth.resolve-permissions`; and the end-to-end revocation test proves a newly issued token cannot reuse cached IAM authority. The legacy `/iam/v1/auth/resolve-permissions` route remains unchanged during the staged cutover.
 
 ---
 

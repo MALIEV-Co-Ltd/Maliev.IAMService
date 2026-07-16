@@ -255,6 +255,23 @@ public sealed class TokenIssuanceCapabilityTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task ResolvePermissions_MultipleAudiences_ReturnsForbidden()
+    {
+        var principalId = Guid.NewGuid();
+        using var client = CreateCapabilityClient(Factory.CreateTokenIssuanceCapability(
+            principalId,
+            audiences:
+            [
+                "https://iam.test.maliev.com/auth/token-issuance",
+                "https://other.test.maliev.com"
+            ]));
+
+        using var response = await client.PostAsJsonAsync(Route, new { PrincipalId = principalId.ToString("D") });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ResolvePermissions_UnknownOrMissingKeyId_ReturnsUnauthorized()
     {
         var principalId = Guid.NewGuid();
@@ -323,6 +340,32 @@ public sealed class TokenIssuanceCapabilityTests : BaseIntegrationTest
             using var response = await client.PostAsJsonAsync(Route, new { PrincipalId = principalId.ToString("D") });
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         }
+    }
+
+    [Theory]
+    [InlineData(-59, -59, 30, (int)HttpStatusCode.Unauthorized)]
+    [InlineData(-10, -1, 30, (int)HttpStatusCode.Forbidden)]
+    public async Task ResolvePermissions_OffsetIssuedAtWindow_IsRejected(
+        int issuedAtOffsetSeconds,
+        int notBeforeOffsetSeconds,
+        int expiresOffsetSeconds,
+        int expectedStatusCode)
+    {
+        var principalId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var token = Factory.CreateTokenIssuanceCapability(
+            principalId,
+            claims => ReplaceClaim(
+                claims,
+                JwtRegisteredClaimNames.Iat,
+                new DateTimeOffset(now.AddSeconds(issuedAtOffsetSeconds)).ToUnixTimeSeconds().ToString()),
+            notBefore: now.AddSeconds(notBeforeOffsetSeconds),
+            expires: now.AddSeconds(expiresOffsetSeconds));
+        using var client = CreateCapabilityClient(token);
+
+        using var response = await client.PostAsJsonAsync(Route, new { PrincipalId = principalId.ToString("D") });
+
+        Assert.Equal((HttpStatusCode)expectedStatusCode, response.StatusCode);
     }
 
     private HttpClient CreateCapabilityClient(string token)

@@ -220,6 +220,60 @@ public sealed class PermissionResolverTests
     }
 
     /// <summary>
+    /// Token issuance must not preserve a revoked authority from the normal permission cache.
+    /// </summary>
+    [Fact]
+    public async Task ResolvePermissionsForTokenIssuanceAsync_StaleGrant_ReadsAuthoritativeBindingsAndEvictsCache()
+    {
+        var principalId = Guid.NewGuid();
+        var expectedCacheKey = IamPermissionCacheKeys.ForPermissions(principalId);
+        var bindingRepository = new Mock<IBindingRepository>();
+        bindingRepository
+            .Setup(repository => repository.GetByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        bindingRepository
+            .Setup(repository => repository.GetDirectPermissionsByPrincipalAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var principalService = new Mock<IPrincipalService>();
+        principalService
+            .Setup(service => service.ResolvePrincipalIdAsync(principalId.ToString(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(principalId);
+        principalService
+            .Setup(service => service.GetByIdAsync(principalId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Principal { PrincipalId = principalId, PrincipalType = "employee", IsActive = true });
+        var cacheService = new Mock<ICacheService>();
+        cacheService
+            .Setup(service => service.GetAsync<ResolvePermissionsResponse>(expectedCacheKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResolvePermissionsResponse
+            {
+                PrincipalId = principalId,
+                Permissions = ["iam.roles.assign"],
+                Roles = ["roles.platform.owner"],
+                FromCache = false
+            });
+        var resolver = new PermissionResolver(
+            bindingRepository.Object,
+            principalService.Object,
+            cacheService.Object,
+            NullLogger<PermissionResolver>.Instance);
+
+        var response = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principalId.ToString()
+        });
+
+        Assert.Empty(response.Permissions);
+        Assert.Empty(response.Roles);
+        Assert.False(response.FromCache);
+        cacheService.Verify(
+            service => service.GetAsync<ResolvePermissionsResponse>(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        cacheService.Verify(
+            service => service.RemoveAsync(expectedCacheKey, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
     /// Inactive principals must be denied before a previously cached grant can be returned.
     /// </summary>
     [Fact]

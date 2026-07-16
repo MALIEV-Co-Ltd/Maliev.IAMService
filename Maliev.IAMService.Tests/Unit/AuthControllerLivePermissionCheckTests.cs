@@ -22,6 +22,45 @@ public class AuthControllerLivePermissionCheckTests
     private const string LiveCheckCredential = "unit-test-live-check-credential-0123456789";
 
     [Fact]
+    public async Task ResolvePermissionsForTokenIssuance_UsesDedicatedLiveResolver()
+    {
+        var principalId = Guid.NewGuid();
+        var expected = new ResolvePermissionsResponse
+        {
+            PrincipalId = principalId,
+            Permissions = ["project.projects.read"],
+            Roles = [],
+            FromCache = false
+        };
+        var resolver = new Mock<IPermissionResolver>();
+        resolver
+            .Setup(candidate => candidate.ResolvePermissionsForTokenIssuanceAsync(
+                It.IsAny<ResolvePermissionsRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+        var controller = CreateController(
+            resolver.Object,
+            new Claim("target_principal_id", principalId.ToString("D")));
+
+        var result = await controller.ResolvePermissionsForTokenIssuance(
+            new ResolvePermissionsRequest { PrincipalId = principalId.ToString("D") },
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Same(expected, ok.Value);
+        resolver.Verify(
+            candidate => candidate.ResolvePermissionsForTokenIssuanceAsync(
+                It.Is<ResolvePermissionsRequest>(request => request.PrincipalId == principalId.ToString("D")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+        resolver.Verify(
+            candidate => candidate.ResolvePermissionsAsync(
+                It.IsAny<ResolvePermissionsRequest>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task CheckPermission_BypassRequestedByEmployee_ReturnsForbiddenWithoutResolving()
     {
         var resolver = CreateResolver();
