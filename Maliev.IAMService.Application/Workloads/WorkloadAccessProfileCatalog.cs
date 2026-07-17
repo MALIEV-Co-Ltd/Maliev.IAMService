@@ -102,6 +102,17 @@ public sealed class WorkloadAccessProfileCatalog
             ])
         {
             PrincipalId = new Guid("18181818-1818-1818-1818-181818181818")
+        },
+        new WorkloadAccessProfile(
+            "material-service",
+            1,
+            "roles.workloads.material-service.v1",
+            [
+                "iam.auth.check-permission",
+                "supplier.suppliers.read"
+            ])
+        {
+            PrincipalId = new Guid("19191919-1919-1919-1919-191919191919")
         }
     ]);
 
