@@ -26,6 +26,9 @@ public sealed record WorkloadAccessProfile(
     string RoleId,
     IReadOnlyList<string> Permissions)
 {
+    /// <summary>Gets the optional canonical principal identifier owned by this profile.</summary>
+    public Guid? PrincipalId { get; init; }
+
     /// <summary>Gets the additional resource-scoped grants owned by this profile.</summary>
     public IReadOnlyList<WorkloadAccessGrant> AdditionalGrants { get; init; } = [];
 }
@@ -97,6 +100,9 @@ public sealed class WorkloadAccessProfileCatalog
                 "job.jobs.read",
                 "currency.rates.read"
             ])
+        {
+            PrincipalId = new Guid("18181818-1818-1818-1818-181818181818")
+        }
     ]);
 
     /// <summary>Initializes and validates a catalog.</summary>
@@ -142,6 +148,7 @@ public sealed class WorkloadAccessProfileCatalog
     {
         if (!IsCanonicalHyphenatedSegment(profile.WorkloadId, MaximumWorkloadIdLength) ||
             profile.Version <= 0 ||
+            profile.PrincipalId == Guid.Empty ||
             string.IsNullOrWhiteSpace(profile.RoleId) ||
             profile.Permissions.Count == 0)
         {
