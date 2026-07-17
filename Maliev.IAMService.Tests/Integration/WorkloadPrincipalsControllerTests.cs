@@ -783,6 +783,98 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
     }
 
     [Fact]
+    public async Task Put_LifecycleServiceProfile_IdempotentlyPersistsOnlyLivePermissionCheckAuthority()
+    {
+        await PrepareLifecycleServiceAsync();
+        var operationId = Guid.Parse("95300000-0000-4000-8000-000000000001");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/lifecycle-service", request);
+        var second = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/lifecycle-service", request);
+
+        Assert.True(first.StatusCode == HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        var secondResult = await second.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        Assert.NotNull(firstResult);
+        Assert.NotNull(secondResult);
+        Assert.Equal(Guid.Parse("20202020-2020-2020-2020-202020202020"), firstResult.PrincipalId);
+        Assert.Equal(firstResult.PrincipalId, secondResult.PrincipalId);
+        Assert.Equal("lifecycle-service", firstResult.WorkloadId);
+        Assert.Equal(1, firstResult.ProfileVersion);
+        Assert.Equal("roles.workloads.lifecycle-service.v1", firstResult.RoleId);
+        var responseBinding = Assert.Single(firstResult.Bindings);
+        Assert.Equal("roles.workloads.lifecycle-service.v1", responseBinding.RoleId);
+        Assert.Null(responseBinding.ResourcePath);
+        Assert.Equal(firstResult.Bindings, secondResult.Bindings);
+
+        await using var db = Factory.CreateDbContext();
+        var principal = await db.Principals.SingleAsync(candidate => candidate.WorkloadId == "lifecycle-service");
+        Assert.Equal("service_account", principal.PrincipalType);
+        Assert.Equal("lifecycle-service@workload.maliev.local", principal.Email);
+        Assert.True(principal.IsActive);
+        var binding = await db.PrincipalRoleBindings.SingleAsync(candidate => candidate.PrincipalId == principal.PrincipalId);
+        Assert.Equal("roles.workloads.lifecycle-service.v1", binding.RoleId);
+        Assert.Null(binding.ResourcePath);
+        var role = await db.Roles
+            .Include(candidate => candidate.RolePermissions)
+            .SingleAsync(candidate => candidate.RoleId == binding.RoleId);
+        Assert.Equal(["iam.auth.check-permission"], role.RolePermissions.Select(item => item.PermissionId));
+        Assert.False(role.IsCustom);
+        Assert.Empty(await db.PrincipalPermissionBindings.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        Assert.Empty(await db.ServiceAccountApiKeys.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+
+        using var scope = Factory.Services.CreateScope();
+        var resolver = scope.ServiceProvider.GetRequiredService<IPermissionResolver>();
+        Assert.True((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString(),
+            PermissionId = "iam.auth.check-permission",
+            BypassCache = true
+        })).Allowed);
+        foreach (var permissionId in new[] { "iam.auth.resolve-permissions", "lifecycle.onboardings.read", "iam.roles.list" })
+        {
+            Assert.False((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+            {
+                PrincipalId = principal.PrincipalId.ToString(),
+                PermissionId = permissionId,
+                BypassCache = true
+            })).Allowed);
+        }
+
+        var tokenAuthority = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString()
+        });
+        Assert.Equal(["iam.auth.check-permission"], tokenAuthority.Permissions);
+        Assert.Equal(["roles.workloads.lifecycle-service.v1"], tokenAuthority.Roles);
+    }
+
+    [Fact]
+    public async Task Put_LifecycleServiceReplayAfterRolePermissionDrift_ReturnsConflict()
+    {
+        await PrepareLifecycleServiceAsync();
+        var operationId = Guid.Parse("95300000-0000-4000-8000-000000000002");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/lifecycle-service", request);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.RolePermissions.Add(new RolePermission
+            {
+                RoleId = "roles.workloads.lifecycle-service.v1",
+                PermissionId = "iam.auth.resolve-permissions"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/lifecycle-service", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
+    [Fact]
     public async Task Put_PricingServiceReplayAfterRolePermissionDrift_ReturnsConflict()
     {
         await PreparePricingServiceAsync();
@@ -1861,6 +1953,25 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
                      "supplier.suppliers.create",
                      "material.materials.update",
                      "pricing.prices.admin",
+                     "iam.workload-principals.provision"
+                 })
+        {
+            await SeedPermissionAsync(permissionId);
+        }
+
+        await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
+    }
+
+    private async Task PrepareLifecycleServiceAsync()
+    {
+        await CleanDatabaseAsync();
+        foreach (var permissionId in new[]
+                 {
+                     "iam.auth.check-permission",
+                     "iam.auth.resolve-permissions",
+                     "lifecycle.onboardings.read",
+                     "iam.roles.list",
                      "iam.workload-principals.provision"
                  })
         {

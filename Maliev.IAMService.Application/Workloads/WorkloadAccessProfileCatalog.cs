@@ -113,6 +113,14 @@ public sealed class WorkloadAccessProfileCatalog
             ])
         {
             PrincipalId = new Guid("19191919-1919-1919-1919-191919191919")
+        },
+        new WorkloadAccessProfile(
+            "lifecycle-service",
+            1,
+            "roles.workloads.lifecycle-service.v1",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = new Guid("20202020-2020-2020-2020-202020202020")
         }
     ]);
 
