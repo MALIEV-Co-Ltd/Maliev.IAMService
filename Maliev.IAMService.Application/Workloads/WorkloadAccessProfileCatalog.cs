@@ -86,7 +86,17 @@ public sealed class WorkloadAccessProfileCatalog
             "accounting-service",
             1,
             "roles.workloads.accounting-service.v1",
-            ["iam.auth.check-permission"])
+            ["iam.auth.check-permission"]),
+        new WorkloadAccessProfile(
+            "pricing-service",
+            1,
+            "roles.workloads.pricing-service.v1",
+            [
+                "iam.auth.check-permission",
+                "material.materials.read",
+                "job.jobs.read",
+                "currency.rates.read"
+            ])
     ]);
 
     /// <summary>Initializes and validates a catalog.</summary>
