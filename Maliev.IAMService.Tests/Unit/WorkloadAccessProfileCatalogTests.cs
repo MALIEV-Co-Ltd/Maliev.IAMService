@@ -140,6 +140,28 @@ public sealed class WorkloadAccessProfileCatalogTests
     }
 
     [Fact]
+    public void Get_PricingServiceVersionOne_ReturnsExactLeastPrivilegeAuthority()
+    {
+        var profile = WorkloadAccessProfileCatalog.Default.Get("pricing-service", 1);
+
+        Assert.Equal("roles.workloads.pricing-service.v1", profile.RoleId);
+        Assert.Equal(
+            [
+                "iam.auth.check-permission",
+                "material.materials.read",
+                "job.jobs.read",
+                "currency.rates.read"
+            ],
+            profile.Permissions);
+        Assert.Empty(profile.AdditionalGrants);
+        Assert.DoesNotContain("iam.auth.resolve-permissions", profile.Permissions);
+        Assert.DoesNotContain(profile.Permissions, permission => permission.Contains('*', StringComparison.Ordinal));
+        Assert.DoesNotContain(profile.Permissions, permission => permission.EndsWith(".write", StringComparison.Ordinal));
+        Assert.DoesNotContain(profile.Permissions, permission => permission.EndsWith(".admin", StringComparison.Ordinal));
+        Assert.DoesNotContain("roles.platform.owner", profile.RoleId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Constructor_SourcePermissionListMutated_PreservesRegisteredProfile()
     {
         var permissions = new List<string> { "country.countries.read" };

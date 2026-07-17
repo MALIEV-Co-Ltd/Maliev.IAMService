@@ -563,6 +563,133 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
     }
 
+    [Fact]
+    public async Task Put_PricingServiceProfile_IdempotentlyPersistsExactLeastPrivilegeAuthority()
+    {
+        await PreparePricingServiceAsync();
+        var operationId = Guid.Parse("95100000-0000-4000-8000-000000000001");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/pricing-service", request);
+        var second = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/pricing-service", request);
+
+        Assert.True(first.StatusCode == HttpStatusCode.OK, await first.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var firstResult = await first.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        var secondResult = await second.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
+        Assert.NotNull(firstResult);
+        Assert.NotNull(secondResult);
+        Assert.NotEqual(ActorId, firstResult.PrincipalId);
+        Assert.Equal(firstResult.PrincipalId, secondResult.PrincipalId);
+        Assert.Equal("pricing-service", firstResult.WorkloadId);
+        Assert.Equal(1, firstResult.ProfileVersion);
+        Assert.Equal("roles.workloads.pricing-service.v1", firstResult.RoleId);
+        var responseBinding = Assert.Single(firstResult.Bindings);
+        Assert.Equal("roles.workloads.pricing-service.v1", responseBinding.RoleId);
+        Assert.Null(responseBinding.ResourcePath);
+        Assert.Equal(firstResult.Bindings, secondResult.Bindings);
+
+        var expectedPermissions = new[]
+        {
+            "iam.auth.check-permission",
+            "material.materials.read",
+            "job.jobs.read",
+            "currency.rates.read"
+        };
+        await using var db = Factory.CreateDbContext();
+        var principal = await db.Principals.SingleAsync(candidate => candidate.WorkloadId == "pricing-service");
+        Assert.Equal("service_account", principal.PrincipalType);
+        Assert.Equal("pricing-service@workload.maliev.local", principal.Email);
+        Assert.Equal("pricing-service workload", principal.DisplayName);
+        Assert.True(principal.IsActive);
+
+        var binding = await db.PrincipalRoleBindings.SingleAsync(candidate => candidate.PrincipalId == principal.PrincipalId);
+        Assert.Equal("roles.workloads.pricing-service.v1", binding.RoleId);
+        Assert.Null(binding.ResourcePath);
+        Assert.Null(binding.ExpiresAt);
+
+        var role = await db.Roles
+            .Include(candidate => candidate.RolePermissions)
+            .SingleAsync(candidate => candidate.RoleId == binding.RoleId);
+        Assert.Equal("pricing-service workload v1", role.RoleName);
+        Assert.Equal(
+            expectedPermissions.Order(StringComparer.Ordinal),
+            role.RolePermissions.Select(item => item.PermissionId).Order(StringComparer.Ordinal));
+        Assert.DoesNotContain(role.RolePermissions, item => item.PermissionId == "iam.auth.resolve-permissions");
+        Assert.DoesNotContain(role.RolePermissions, item => item.PermissionId.EndsWith(".write", StringComparison.Ordinal));
+        Assert.DoesNotContain(role.RolePermissions, item => item.PermissionId.EndsWith(".admin", StringComparison.Ordinal));
+        Assert.Equal("iam", role.ServiceName);
+        Assert.Equal("Server-owned least-privilege workload role.", role.Description);
+        Assert.False(role.IsCustom);
+        Assert.Empty(await db.PrincipalPermissionBindings.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        Assert.Empty(await db.ServiceAccountApiKeys.Where(candidate => candidate.PrincipalId == principal.PrincipalId).ToListAsync());
+        var operation = await db.WorkloadProvisioningOperations.SingleAsync(candidate => candidate.OperationId == operationId);
+        Assert.Equal(principal.PrincipalId, operation.PrincipalId);
+        Assert.Equal(ActorId, operation.PerformedBy);
+        Assert.Equal("pricing-service", operation.WorkloadId);
+        Assert.Equal(1, operation.ProfileVersion);
+
+        using var scope = Factory.Services.CreateScope();
+        var resolver = scope.ServiceProvider.GetRequiredService<IPermissionResolver>();
+        foreach (var permissionId in expectedPermissions)
+        {
+            Assert.True((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+            {
+                PrincipalId = principal.PrincipalId.ToString(),
+                PermissionId = permissionId,
+                BypassCache = true
+            })).Allowed);
+        }
+
+        foreach (var permissionId in new[]
+                 {
+                     "iam.auth.resolve-permissions",
+                     "material.materials.update",
+                     "job.jobs.write",
+                     "currency.rates.update",
+                     "pricing.prices.admin"
+                 })
+        {
+            Assert.False((await resolver.CheckPermissionAsync(new CheckPermissionRequest
+            {
+                PrincipalId = principal.PrincipalId.ToString(),
+                PermissionId = permissionId,
+                BypassCache = true
+            })).Allowed);
+        }
+
+        var tokenAuthority = await resolver.ResolvePermissionsForTokenIssuanceAsync(new ResolvePermissionsRequest
+        {
+            PrincipalId = principal.PrincipalId.ToString()
+        });
+        Assert.Equal(expectedPermissions.Order(StringComparer.Ordinal), tokenAuthority.Permissions.Order(StringComparer.Ordinal));
+        Assert.Equal(["roles.workloads.pricing-service.v1"], tokenAuthority.Roles);
+    }
+
+    [Fact]
+    public async Task Put_PricingServiceReplayAfterRolePermissionDrift_ReturnsConflict()
+    {
+        await PreparePricingServiceAsync();
+        var operationId = Guid.Parse("95100000-0000-4000-8000-000000000002");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/pricing-service", request);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.RolePermissions.Add(new RolePermission
+            {
+                RoleId = "roles.workloads.pricing-service.v1",
+                PermissionId = "iam.auth.resolve-permissions"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/pricing-service", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("extra")]
@@ -1516,6 +1643,30 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         await SeedPermissionAsync("iam.auth.check-permission");
         await SeedPermissionAsync("iam.auth.resolve-permissions");
         await SeedPermissionAsync("iam.workload-principals.provision");
+        await SeedActorAsync(ActorId, "user", true);
+        await SeedDirectAuthorityAsync("iam.workload-principals.provision");
+    }
+
+    private async Task PreparePricingServiceAsync()
+    {
+        await CleanDatabaseAsync();
+        foreach (var permissionId in new[]
+                 {
+                     "iam.auth.check-permission",
+                     "material.materials.read",
+                     "job.jobs.read",
+                     "currency.rates.read",
+                     "iam.auth.resolve-permissions",
+                     "material.materials.update",
+                     "job.jobs.write",
+                     "currency.rates.update",
+                     "pricing.prices.admin",
+                     "iam.workload-principals.provision"
+                 })
+        {
+            await SeedPermissionAsync(permissionId);
+        }
+
         await SeedActorAsync(ActorId, "user", true);
         await SeedDirectAuthorityAsync("iam.workload-principals.provision");
     }
