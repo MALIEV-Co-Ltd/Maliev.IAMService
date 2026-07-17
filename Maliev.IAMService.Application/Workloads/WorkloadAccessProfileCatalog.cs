@@ -111,7 +111,8 @@ public sealed class WorkloadAccessProfileCatalog
     {
         ArgumentNullException.ThrowIfNull(profiles);
         var validated = new Dictionary<(string, int), WorkloadAccessProfile>();
-        var canonicalPrincipalIds = new HashSet<Guid>();
+        var canonicalPrincipalOwners = new Dictionary<Guid, string>();
+        var workloadPrincipalPolicies = new Dictionary<string, Guid?>(StringComparer.Ordinal);
         foreach (var profile in profiles)
         {
             var additionalGrants = profile.AdditionalGrants
@@ -126,12 +127,31 @@ public sealed class WorkloadAccessProfileCatalog
                 AdditionalGrants = Array.AsReadOnly(additionalGrants)
             };
             Validate(registeredProfile);
-            if (registeredProfile.PrincipalId is { } principalId &&
-                !canonicalPrincipalIds.Add(principalId))
+            if (workloadPrincipalPolicies.TryGetValue(
+                    registeredProfile.WorkloadId,
+                    out var existingPrincipalPolicy) &&
+                existingPrincipalPolicy != registeredProfile.PrincipalId)
             {
                 throw new ArgumentException(
-                    $"Canonical workload principal '{principalId:D}' is assigned to more than one profile.",
+                    $"Workload '{registeredProfile.WorkloadId}' has inconsistent canonical principal policy across versions.",
                     nameof(profiles));
+            }
+
+            workloadPrincipalPolicies.TryAdd(
+                registeredProfile.WorkloadId,
+                registeredProfile.PrincipalId);
+            if (registeredProfile.PrincipalId is { } principalId &&
+                canonicalPrincipalOwners.TryGetValue(principalId, out var owningWorkloadId) &&
+                !string.Equals(owningWorkloadId, registeredProfile.WorkloadId, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Canonical workload principal '{principalId:D}' is assigned to more than one workload.",
+                    nameof(profiles));
+            }
+
+            if (registeredProfile.PrincipalId is { } canonicalPrincipalId)
+            {
+                canonicalPrincipalOwners.TryAdd(canonicalPrincipalId, registeredProfile.WorkloadId);
             }
 
             if (!validated.TryAdd((registeredProfile.WorkloadId, registeredProfile.Version), registeredProfile))
