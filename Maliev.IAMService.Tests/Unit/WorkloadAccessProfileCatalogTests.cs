@@ -187,6 +187,82 @@ public sealed class WorkloadAccessProfileCatalogTests
     }
 
     [Fact]
+    public void Constructor_SameWorkloadVersionsReuseCanonicalPrincipalId_Succeeds()
+    {
+        var principalId = Guid.Parse("18181818-1818-1818-1818-181818181818");
+        var first = new WorkloadAccessProfile(
+            "pricing-service",
+            1,
+            "roles.workloads.pricing-service.v1",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = principalId
+        };
+        var second = new WorkloadAccessProfile(
+            "pricing-service",
+            2,
+            "roles.workloads.pricing-service.v2",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = principalId
+        };
+
+        var catalog = new WorkloadAccessProfileCatalog([first, second]);
+
+        Assert.Equal(principalId, catalog.Get("pricing-service", 1).PrincipalId);
+        Assert.Equal(principalId, catalog.Get("pricing-service", 2).PrincipalId);
+    }
+
+    [Fact]
+    public void Constructor_SameWorkloadVersionsUseDifferentCanonicalPrincipalIds_Throws()
+    {
+        var first = new WorkloadAccessProfile(
+            "pricing-service",
+            1,
+            "roles.workloads.pricing-service.v1",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = Guid.Parse("18181818-1818-1818-1818-181818181818")
+        };
+        var second = new WorkloadAccessProfile(
+            "pricing-service",
+            2,
+            "roles.workloads.pricing-service.v2",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = Guid.Parse("19191919-1919-1919-1919-191919191919")
+        };
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([first, second]));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Constructor_SameWorkloadVersionsMixCanonicalAndGeneratedPrincipalPolicies_Throws(
+        bool canonicalProfileFirst)
+    {
+        var canonical = new WorkloadAccessProfile(
+            "pricing-service",
+            canonicalProfileFirst ? 1 : 2,
+            $"roles.workloads.pricing-service.v{(canonicalProfileFirst ? 1 : 2)}",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = Guid.Parse("18181818-1818-1818-1818-181818181818")
+        };
+        var generated = new WorkloadAccessProfile(
+            "pricing-service",
+            canonicalProfileFirst ? 2 : 1,
+            $"roles.workloads.pricing-service.v{(canonicalProfileFirst ? 2 : 1)}",
+            ["iam.auth.check-permission"]);
+        var profiles = canonicalProfileFirst
+            ? new[] { canonical, generated }
+            : new[] { generated, canonical };
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog(profiles));
+    }
+
+    [Fact]
     public void Constructor_SourcePermissionListMutated_PreservesRegisteredProfile()
     {
         var permissions = new List<string> { "country.countries.read" };
