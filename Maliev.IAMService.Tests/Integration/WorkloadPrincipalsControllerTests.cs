@@ -695,7 +695,7 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         var expectedPermissions = new[]
         {
             "iam.auth.check-permission",
-            "supplier.suppliers.read"
+            "supplier.supplier-references.read"
         };
         await using var db = Factory.CreateDbContext();
         var principal = await db.Principals.SingleAsync(candidate => candidate.WorkloadId == "material-service");
@@ -736,6 +736,7 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         foreach (var permissionId in new[]
                  {
                      "iam.auth.resolve-permissions",
+                     "supplier.suppliers.read",
                      "supplier.suppliers.create",
                      "material.materials.update",
                      "pricing.prices.admin"
@@ -755,6 +756,30 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         });
         Assert.Equal(expectedPermissions.Order(StringComparer.Ordinal), tokenAuthority.Permissions.Order(StringComparer.Ordinal));
         Assert.Equal(["roles.workloads.material-service.v1"], tokenAuthority.Roles);
+    }
+
+    [Fact]
+    public async Task Put_MaterialServiceReplayAfterLegacySupplierPermissionDrift_ReturnsConflict()
+    {
+        await PrepareMaterialServiceAsync();
+        var operationId = Guid.Parse("95200000-0000-4000-8000-000000000002");
+        var request = new ProvisionWorkloadPrincipalRequest { ProfileVersion = 1, OperationId = operationId };
+        var first = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/material-service", request);
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.RolePermissions.Add(new RolePermission
+            {
+                RoleId = "roles.workloads.material-service.v1",
+                PermissionId = "supplier.suppliers.read"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var replay = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/material-service", request);
+
+        Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
     }
 
     [Fact]
@@ -1830,6 +1855,7 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         foreach (var permissionId in new[]
                  {
                      "iam.auth.check-permission",
+                     "supplier.supplier-references.read",
                      "supplier.suppliers.read",
                      "iam.auth.resolve-permissions",
                      "supplier.suppliers.create",

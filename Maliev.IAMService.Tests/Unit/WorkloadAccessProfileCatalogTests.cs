@@ -172,7 +172,7 @@ public sealed class WorkloadAccessProfileCatalogTests
         Assert.Equal(
             [
                 "iam.auth.check-permission",
-                "supplier.suppliers.read"
+                "supplier.supplier-references.read"
             ],
             profile.Permissions);
         Assert.Empty(profile.AdditionalGrants);
@@ -180,6 +180,7 @@ public sealed class WorkloadAccessProfileCatalogTests
         Assert.DoesNotContain(profile.Permissions, permission => permission.Contains('*', StringComparison.Ordinal));
         Assert.DoesNotContain(profile.Permissions, permission => permission.EndsWith(".write", StringComparison.Ordinal));
         Assert.DoesNotContain(profile.Permissions, permission => permission.EndsWith(".admin", StringComparison.Ordinal));
+        Assert.DoesNotContain("supplier.suppliers.read", profile.Permissions);
         Assert.DoesNotContain("roles.platform.owner", profile.RoleId, StringComparison.OrdinalIgnoreCase);
     }
 
