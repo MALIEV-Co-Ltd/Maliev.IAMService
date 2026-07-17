@@ -163,6 +163,30 @@ public sealed class WorkloadAccessProfileCatalogTests
     }
 
     [Fact]
+    public void Constructor_DuplicateCanonicalPrincipalIds_Throws()
+    {
+        var principalId = Guid.Parse("18181818-1818-1818-1818-181818181818");
+        var first = new WorkloadAccessProfile(
+            "pricing-service",
+            1,
+            "roles.workloads.pricing-service.v1",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = principalId
+        };
+        var second = new WorkloadAccessProfile(
+            "quotation-service",
+            1,
+            "roles.workloads.quotation-service.v1",
+            ["iam.auth.check-permission"])
+        {
+            PrincipalId = principalId
+        };
+
+        Assert.Throws<ArgumentException>(() => new WorkloadAccessProfileCatalog([first, second]));
+    }
+
+    [Fact]
     public void Constructor_SourcePermissionListMutated_PreservesRegisteredProfile()
     {
         var permissions = new List<string> { "country.countries.read" };

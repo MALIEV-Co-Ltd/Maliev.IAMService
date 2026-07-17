@@ -111,6 +111,7 @@ public sealed class WorkloadAccessProfileCatalog
     {
         ArgumentNullException.ThrowIfNull(profiles);
         var validated = new Dictionary<(string, int), WorkloadAccessProfile>();
+        var canonicalPrincipalIds = new HashSet<Guid>();
         foreach (var profile in profiles)
         {
             var additionalGrants = profile.AdditionalGrants
@@ -125,6 +126,14 @@ public sealed class WorkloadAccessProfileCatalog
                 AdditionalGrants = Array.AsReadOnly(additionalGrants)
             };
             Validate(registeredProfile);
+            if (registeredProfile.PrincipalId is { } principalId &&
+                !canonicalPrincipalIds.Add(principalId))
+            {
+                throw new ArgumentException(
+                    $"Canonical workload principal '{principalId:D}' is assigned to more than one profile.",
+                    nameof(profiles));
+            }
+
             if (!validated.TryAdd((registeredProfile.WorkloadId, registeredProfile.Version), registeredProfile))
             {
                 throw new ArgumentException($"Duplicate workload profile '{registeredProfile.WorkloadId}' version {registeredProfile.Version}.", nameof(profiles));
