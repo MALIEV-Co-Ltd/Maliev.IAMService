@@ -579,7 +579,7 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         var secondResult = await second.Content.ReadFromJsonAsync<WorkloadPrincipalResponse>();
         Assert.NotNull(firstResult);
         Assert.NotNull(secondResult);
-        Assert.NotEqual(ActorId, firstResult.PrincipalId);
+        Assert.Equal(Guid.Parse("18181818-1818-1818-1818-181818181818"), firstResult.PrincipalId);
         Assert.Equal(firstResult.PrincipalId, secondResult.PrincipalId);
         Assert.Equal("pricing-service", firstResult.WorkloadId);
         Assert.Equal(1, firstResult.ProfileVersion);
@@ -688,6 +688,37 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         var replay = await _employeeClient.PutAsJsonAsync("/iam/v1/workload-principals/pricing-service", request);
 
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_PricingServiceExistingWrongPrincipalId_ReturnsConflict()
+    {
+        await PreparePricingServiceAsync();
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Principals.Add(new Principal
+            {
+                PrincipalId = Guid.Parse("18181818-1818-1818-1818-181818181819"),
+                PrincipalType = "service_account",
+                WorkloadId = "pricing-service",
+                DisplayName = "pricing-service workload",
+                Email = "pricing-service@workload.maliev.local",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/pricing-service",
+            new ProvisionWorkloadPrincipalRequest
+            {
+                ProfileVersion = 1,
+                OperationId = Guid.Parse("95100000-0000-4000-8000-000000000003")
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Theory]

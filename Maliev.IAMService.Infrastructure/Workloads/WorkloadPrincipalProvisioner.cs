@@ -147,9 +147,28 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
             throw new WorkloadProvisioningConflictException("The workload identifier belongs to an incompatible principal.");
         }
 
+        if (principal is not null &&
+            profile.PrincipalId is { } canonicalPrincipalId &&
+            principal.PrincipalId != canonicalPrincipalId)
+        {
+            throw new WorkloadProvisioningConflictException(
+                "The workload identifier belongs to a non-canonical principal.");
+        }
+
+        if (principal is null && profile.PrincipalId is { } expectedPrincipalId)
+        {
+            var principalIdOwner = await _dbContext.Principals
+                .SingleOrDefaultAsync(candidate => candidate.PrincipalId == expectedPrincipalId, cancellationToken);
+            if (principalIdOwner is not null)
+            {
+                throw new WorkloadProvisioningConflictException(
+                    "The canonical workload principal identifier is already assigned.");
+            }
+        }
+
         principal ??= new Principal
         {
-            PrincipalId = Guid.NewGuid(),
+            PrincipalId = profile.PrincipalId ?? Guid.NewGuid(),
             PrincipalType = "service_account",
             WorkloadId = workloadId,
             DisplayName = $"{workloadId} workload",
@@ -310,7 +329,8 @@ public sealed class WorkloadPrincipalProvisioner : IWorkloadPrincipalProvisioner
         if (principal is null ||
             !principal.IsActive ||
             !string.Equals(principal.PrincipalType, "service_account", StringComparison.Ordinal) ||
-            !string.Equals(principal.WorkloadId, workloadId, StringComparison.Ordinal))
+            !string.Equals(principal.WorkloadId, workloadId, StringComparison.Ordinal) ||
+            (profile.PrincipalId is { } canonicalPrincipalId && principal.PrincipalId != canonicalPrincipalId))
         {
             throw new WorkloadProvisioningConflictException("The recorded workload principal is missing, inactive, or has immutable identity drift.");
         }

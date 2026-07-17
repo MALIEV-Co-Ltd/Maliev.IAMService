@@ -144,6 +144,7 @@ public sealed class WorkloadAccessProfileCatalogTests
     {
         var profile = WorkloadAccessProfileCatalog.Default.Get("pricing-service", 1);
 
+        Assert.Equal(new Guid("18181818-1818-1818-1818-181818181818"), profile.PrincipalId);
         Assert.Equal("roles.workloads.pricing-service.v1", profile.RoleId);
         Assert.Equal(
             [
