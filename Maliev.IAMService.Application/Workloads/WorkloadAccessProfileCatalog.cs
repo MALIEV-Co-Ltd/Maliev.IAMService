@@ -109,7 +109,7 @@ public sealed class WorkloadAccessProfileCatalog
             "roles.workloads.material-service.v1",
             [
                 "iam.auth.check-permission",
-                "supplier.suppliers.read"
+                "supplier.supplier-references.read"
             ])
         {
             PrincipalId = new Guid("19191919-1919-1919-1919-191919191919")
