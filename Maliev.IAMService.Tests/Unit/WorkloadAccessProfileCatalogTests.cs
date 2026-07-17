@@ -185,6 +185,20 @@ public sealed class WorkloadAccessProfileCatalogTests
     }
 
     [Fact]
+    public void Get_LifecycleServiceVersionOne_ReturnsOnlyLivePermissionCheckAuthority()
+    {
+        var profile = WorkloadAccessProfileCatalog.Default.Get("lifecycle-service", 1);
+
+        Assert.Equal(new Guid("20202020-2020-2020-2020-202020202020"), profile.PrincipalId);
+        Assert.Equal("roles.workloads.lifecycle-service.v1", profile.RoleId);
+        Assert.Equal(["iam.auth.check-permission"], profile.Permissions);
+        Assert.Empty(profile.AdditionalGrants);
+        Assert.DoesNotContain("iam.auth.resolve-permissions", profile.Permissions);
+        Assert.DoesNotContain(profile.Permissions, permission => permission.Contains('*', StringComparison.Ordinal));
+        Assert.DoesNotContain("roles.platform.owner", profile.RoleId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Constructor_DuplicateCanonicalPrincipalIds_Throws()
     {
         var principalId = Guid.Parse("18181818-1818-1818-1818-181818181818");
