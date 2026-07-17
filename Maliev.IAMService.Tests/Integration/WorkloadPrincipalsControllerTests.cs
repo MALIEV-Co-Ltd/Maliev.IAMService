@@ -721,6 +721,37 @@ public sealed class WorkloadPrincipalsControllerTests(TestWebApplicationFactory 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Put_PricingServiceCanonicalPrincipalIdOwnedByDifferentWorkload_ReturnsConflict()
+    {
+        await PreparePricingServiceAsync();
+        await using (var db = Factory.CreateDbContext())
+        {
+            db.Principals.Add(new Principal
+            {
+                PrincipalId = Guid.Parse("18181818-1818-1818-1818-181818181818"),
+                PrincipalType = "service_account",
+                WorkloadId = "quotation-service",
+                DisplayName = "quotation-service workload",
+                Email = "quotation-service@workload.maliev.local",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _employeeClient.PutAsJsonAsync(
+            "/iam/v1/workload-principals/pricing-service",
+            new ProvisionWorkloadPrincipalRequest
+            {
+                ProfileVersion = 1,
+                OperationId = Guid.Parse("95100000-0000-4000-8000-000000000004")
+            });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
     [Theory]
     [InlineData("missing")]
     [InlineData("extra")]
