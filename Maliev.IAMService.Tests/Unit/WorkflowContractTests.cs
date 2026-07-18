@@ -84,6 +84,23 @@ public sealed class WorkflowContractTests
         }
     }
 
+    /// <summary>
+    /// Dependabot must receive a BOM-free v2 document with all maintained dependency ecosystems.
+    /// </summary>
+    [Fact]
+    public void DependabotConfiguration_HasParserSafeV2Root()
+    {
+        var path = Path.Combine(Root, ".github", "dependabot.yml");
+        var bytes = File.ReadAllBytes(path);
+        Assert.False(bytes.AsSpan().StartsWith(System.Text.Encoding.UTF8.Preamble), "Dependabot configuration must not contain a UTF-8 BOM.");
+
+        var source = System.Text.Encoding.UTF8.GetString(bytes);
+        Assert.StartsWith("version: 2\nupdates:\n", source, StringComparison.Ordinal);
+        Assert.Contains("package-ecosystem: \"github-actions\"", source, StringComparison.Ordinal);
+        Assert.Contains("package-ecosystem: \"nuget\"", source, StringComparison.Ordinal);
+        Assert.Contains("package-ecosystem: \"docker\"", source, StringComparison.Ordinal);
+    }
+
     private static void AssertSafe(string source)
     {
         foreach (var forbidden in new[]
