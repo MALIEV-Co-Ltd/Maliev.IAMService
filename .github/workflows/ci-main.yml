@@ -1,0 +1,9 @@
+name: Validate - Main
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: ./.github/workflows/_validate.yml
