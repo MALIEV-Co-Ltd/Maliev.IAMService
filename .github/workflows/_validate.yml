@@ -1,0 +1,49 @@
+name: Reusable Validation
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout IAM service
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          path: service
+          persist-credentials: false
+      - name: Checkout shared Aspire defaults
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: MALIEV-Co-Ltd/Maliev.Aspire
+          ref: fb457bde0f3a0e5a01f767c88b942b2ccb8d7c61
+          path: Maliev.Aspire
+          persist-credentials: false
+      - name: Checkout shared messaging contracts
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: MALIEV-Co-Ltd/Maliev.MessagingContracts
+          ref: 71d11dc093fb34ab41263d395c45629203cdbf18
+          path: Maliev.MessagingContracts
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        working-directory: service
+        run: dotnet restore Maliev.IAMService.slnx --configfile nuget.validation.config
+      - name: Audit dependencies
+        working-directory: service
+        run: dotnet list Maliev.IAMService.slnx package --vulnerable --include-transitive --no-restore
+      - name: Verify formatting
+        working-directory: service
+        run: dotnet format Maliev.IAMService.slnx --verify-no-changes --no-restore
+      - name: Build
+        working-directory: service
+        run: dotnet build Maliev.IAMService.slnx --configuration Release --no-restore
+      - name: Test
+        working-directory: service
+        run: dotnet test Maliev.IAMService.slnx --configuration Release --no-build --no-restore --verbosity normal
