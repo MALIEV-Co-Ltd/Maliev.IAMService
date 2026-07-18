@@ -58,6 +58,13 @@ public sealed class WorkflowContractTests
         Assert.Contains("dotnet-version: 10.0.x", source, StringComparison.Ordinal);
         Assert.Contains("--configfile nuget.validation.config", source, StringComparison.Ordinal);
 
+        var dotnetCommands = source.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("run: ", StringComparison.Ordinal) && line.Contains("dotnet ", StringComparison.Ordinal))
+            .ToArray();
+        Assert.NotEmpty(dotnetCommands);
+        Assert.All(dotnetCommands, command => Assert.StartsWith("run: GITHUB_ACTIONS=false dotnet ", command, StringComparison.Ordinal));
+
         var nuget = File.ReadAllText(Path.Combine(Root, "nuget.validation.config"));
         Assert.Contains("<clear />", nuget, StringComparison.Ordinal);
         Assert.Contains("https://api.nuget.org/v3/index.json", nuget, StringComparison.Ordinal);
