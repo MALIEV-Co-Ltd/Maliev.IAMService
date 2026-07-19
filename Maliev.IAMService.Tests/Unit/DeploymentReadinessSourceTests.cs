@@ -61,12 +61,12 @@ public sealed partial class DeploymentReadinessSourceTests
         foreach (string workflowName in new[] { "ci-develop.yml", "ci-staging.yml", "ci-main.yml" })
         {
             string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", workflowName));
-            Assert.Contains("uses: ./.github/workflows/_build-and-test.yml", workflow, StringComparison.Ordinal);
-            Assert.Contains("-p:ServiceDefaultsVersion=1.0.86-alpha", workflow, StringComparison.Ordinal);
-            Assert.Contains("-p:MessagingContractsVersion=1.0.94-alpha", workflow, StringComparison.Ordinal);
-            Assert.Contains("needs: build-and-test", workflow, StringComparison.Ordinal);
-            Assert.DoesNotContain("sed -i", workflow, StringComparison.Ordinal);
-            Assert.DoesNotContain("1.0.*", workflow, StringComparison.Ordinal);
+            Assert.Contains("uses: ./.github/workflows/_validate.yml", workflow, StringComparison.Ordinal);
+            Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("secrets.", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("GITOPS_PAT", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("docker push", workflow, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("maliev-gitops", workflow, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -77,15 +77,16 @@ public sealed partial class DeploymentReadinessSourceTests
     [InlineData("ci-develop.yml")]
     [InlineData("ci-staging.yml")]
     [InlineData("ci-main.yml")]
-    public void ReusableBuildWorkflowCallerGrantsRequiredPermissions(string workflowName)
+    public void BranchWorkflowDelegatesToReadOnlyValidation(string workflowName)
     {
         string root = FindRepoRoot();
         string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", workflowName))
             .Replace("\r\n", "\n", StringComparison.Ordinal);
-        string callerJob = ExtractWorkflowJob(workflow, "build-and-test");
+        string callerJob = ExtractWorkflowJob(workflow, "validate");
 
-        Assert.Contains("uses: ./.github/workflows/_build-and-test.yml", callerJob, StringComparison.Ordinal);
-        Assert.Contains("    permissions:\n      contents: read\n      packages: read", callerJob, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.github/workflows/_validate.yml", callerJob, StringComparison.Ordinal);
+        Assert.Contains("permissions:\n  contents: read", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets:", callerJob, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -95,13 +96,16 @@ public sealed partial class DeploymentReadinessSourceTests
     public void PullRequestValidationReconstructsExactDependenciesWithoutCredentials()
     {
         string root = FindRepoRoot();
-        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "pr-validation.yml"));
+        string workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "_validate.yml"));
+        string pullRequestWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "pr-validation.yml"));
         string packageScript = File.ReadAllText(Path.Combine(root, "scripts", "prepare-iam-ci-packages.sh"));
         string validationConfig = File.ReadAllText(Path.Combine(root, "NuGet.PRValidation.Config"));
         string productionConfig = File.ReadAllText(Path.Combine(root, "nuget.config"));
 
-        Assert.Contains("pull_request:", workflow, StringComparison.Ordinal);
-        Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
+        Assert.Contains("workflow_call:", workflow, StringComparison.Ordinal);
+        Assert.Contains("pull_request:", pullRequestWorkflow, StringComparison.Ordinal);
+        Assert.Contains("uses: ./.github/workflows/_validate.yml", pullRequestWorkflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("pull_request_target", pullRequestWorkflow, StringComparison.Ordinal);
         Assert.Contains("permissions:", workflow, StringComparison.Ordinal);
         Assert.Contains("contents: read", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("packages: read", workflow, StringComparison.Ordinal);
@@ -110,8 +114,8 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.DoesNotContain("github.token", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NUGET_USERNAME", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NUGET_PASSWORD", workflow, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
-        Assert.Contains("cancel-in-progress: true", workflow, StringComparison.Ordinal);
+        Assert.Contains("concurrency:", pullRequestWorkflow, StringComparison.Ordinal);
+        Assert.Contains("cancel-in-progress: true", pullRequestWorkflow, StringComparison.Ordinal);
         Assert.Contains("NUGET_PACKAGES: ${{ github.workspace }}/.ci-nuget/packages", workflow, StringComparison.Ordinal);
 
         Assert.Contains("ref: 71d11dc093fb34ab41263d395c45629203cdbf18", workflow, StringComparison.Ordinal);
@@ -134,6 +138,8 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.Contains("format: cyclonedx", workflow, StringComparison.Ordinal);
         Assert.Contains("severity: HIGH,CRITICAL", workflow, StringComparison.Ordinal);
         Assert.Contains("exit-code: \"1\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("\n  validate:\n", workflow, StringComparison.Ordinal);
+        Assert.Contains("Confirm all validation gates passed", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("argocd", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("kubectl", workflow, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(UnpinnedActionRegex().Matches(workflow).Select(match => match.Value));
@@ -153,6 +159,19 @@ public sealed partial class DeploymentReadinessSourceTests
         Assert.Contains("<package pattern=\"Maliev.*\" />", validationConfig, StringComparison.Ordinal);
         Assert.Contains("<packageSourceMapping>", productionConfig, StringComparison.Ordinal);
         Assert.Contains("<packageSource key=\"github\">", productionConfig, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Dependabot configuration must remain parser-safe after branch convergence.
+    /// </summary>
+    [Fact]
+    public void DependabotConfigurationHasNoUtf8Bom()
+    {
+        string root = FindRepoRoot();
+        byte[] bytes = File.ReadAllBytes(Path.Combine(root, ".github", "dependabot.yml"));
+
+        Assert.False(bytes.AsSpan().StartsWith(System.Text.Encoding.UTF8.Preamble));
+        Assert.StartsWith("version: 2\nupdates:\n", System.Text.Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
     }
 
     [GeneratedRegex(@"uses:\s+[^\s@]+@(?![0-9a-f]{40}(?:\s|$))[^\s]+", RegexOptions.CultureInvariant)]

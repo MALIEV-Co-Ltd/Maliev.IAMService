@@ -1,0 +1,287 @@
+name: Reusable Validation
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}/.ci-nuget/packages
+
+jobs:
+  dependency-packages:
+    name: Build exact public-source dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      dependency-artifact-digest: ${{ steps.upload-dependencies.outputs.artifact-digest }}
+    steps:
+      - name: Checkout IAMService source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact MessagingContracts source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          repository: MALIEV-Co-Ltd/Maliev.MessagingContracts
+          ref: 71d11dc093fb34ab41263d395c45629203cdbf18
+          path: .ci-sources/Maliev.MessagingContracts
+          persist-credentials: false
+
+      - name: Checkout exact ServiceDefaults source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          repository: MALIEV-Co-Ltd/Maliev.Aspire
+          ref: fb457bde0f3a0e5a01f767c88b942b2ccb8d7c61
+          path: .ci-sources/Maliev.Aspire
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1  # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build exact dependency packages
+        run: bash scripts/prepare-iam-ci-packages.sh
+
+      - name: Upload exact dependency packages
+        id: upload-dependencies
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: iam-ci-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .ci-packages/*.nupkg
+            .ci-packages/SHA256SUMS.txt
+          if-no-files-found: error
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 1
+
+      - name: Validate dependency artifact digest
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ steps.upload-dependencies.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_DIGEST"
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+
+  build-and-test:
+    name: Release build, test, and dependency audit
+    needs: dependency-packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1  # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download exact dependency packages
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          name: iam-ci-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci-packages
+
+      - name: Verify exact dependency packages
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ needs.dependency-packages.outputs.dependency-artifact-digest }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_DIGEST"
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          (cd .ci-packages && sha256sum --check SHA256SUMS.txt)
+
+      - name: Restore exact package graph
+        run: >-
+          dotnet restore Maliev.IAMService.slnx
+          --configfile NuGet.PRValidation.Config
+          -p:GITHUB_ACTIONS=true
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
+
+      - name: Record resolved package graph
+        run: dotnet list Maliev.IAMService.slnx package --include-transitive --no-restore
+
+      - name: Build
+        run: >-
+          dotnet build Maliev.IAMService.slnx
+          --configuration Release
+          --no-restore
+          -p:GITHUB_ACTIONS=true
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
+
+      - name: Test
+        run: >-
+          dotnet test Maliev.IAMService.slnx
+          --configuration Release
+          --no-build
+          --no-restore
+          --verbosity normal
+          -p:GITHUB_ACTIONS=true
+          -p:ServiceDefaultsVersion=1.0.86-alpha
+          -p:MessagingContractsVersion=1.0.94-alpha
+
+      - name: Audit resolved NuGet graph
+        run: dotnet list Maliev.IAMService.slnx package --include-transitive --vulnerable --no-restore --configfile NuGet.PRValidation.Config
+
+  container:
+    name: Build and scan production image
+    needs: dependency-packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE_TAG: maliev-iam-service:pr-validation-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download exact dependency packages
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0
+        with:
+          name: iam-ci-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .ci-packages
+
+      - name: Verify exact dependency packages
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ needs.dependency-packages.outputs.dependency-artifact-digest }}
+        run: |
+          set -euo pipefail
+          test -n "$ARTIFACT_DIGEST"
+          [[ "$ARTIFACT_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          (cd .ci-packages && sha256sum --check SHA256SUMS.txt)
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: Build local production image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          file: ./Maliev.IAMService.Api/Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_TAG }}
+          build-args: |
+            dependency_restore_stage=restore-local
+
+      - name: Validate runtime image metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata="$(docker image inspect "$IMAGE_TAG")"
+          test "$(jq -r '.[0].Config.User' <<< "$metadata")" = "app"
+          test "$(jq -c '.[0].Config.Entrypoint' <<< "$metadata")" = '["dotnet","Maliev.IAMService.Api.dll"]'
+          test "$(jq -r '.[0].Config.ExposedPorts | has("8080/tcp")' <<< "$metadata")" = "true"
+
+      - name: Smoke test production image liveness
+        shell: bash
+        run: |
+          set -euo pipefail
+          network_name="iam-smoke-net-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          database_name="iam-smoke-db-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          application_name="iam-smoke-app-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          live_check_credential_hash="$(openssl rand 32 | openssl dgst -sha256 -binary | base64 -w0)"
+
+          # shellcheck disable=SC2317 # Invoked indirectly by the EXIT trap.
+          cleanup() {
+            docker rm --force "$application_name" "$database_name" >/dev/null 2>&1 || true
+            docker network rm "$network_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "$network_name" >/dev/null
+          docker run --detach \
+            --name "$database_name" \
+            --network "$network_name" \
+            --env POSTGRES_DB=iam \
+            --env POSTGRES_USER=postgres \
+            --env POSTGRES_PASSWORD=iam-smoke-password \
+            postgres:18-alpine >/dev/null
+
+          for attempt in {1..30}; do
+            if docker exec "$database_name" pg_isready --username postgres --dbname iam >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$database_name"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          docker run --detach \
+            --name "$application_name" \
+            --network "$network_name" \
+            --publish "127.0.0.1:18080:8080" \
+            --env ASPNETCORE_ENVIRONMENT=Testing \
+            --env Cache__RedisEnabled=false \
+            --env MassTransit__UseInMemory=true \
+            --env CORS__AllowedOrigins__0=http://localhost \
+            --env "IAM__LivePermissionChecks__CredentialHashes__IntranetBff=$live_check_credential_hash" \
+            --env "ConnectionStrings__IamDbContext=Host=$database_name;Port=5432;Database=iam;Username=postgres;Password=iam-smoke-password" \
+            "$IMAGE_TAG" >/dev/null
+
+          for attempt in {1..60}; do
+            if curl --fail --silent --show-error "http://127.0.0.1:18080/iam/liveness" >/dev/null 2>&1; then
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' "$application_name")" != "true" ]; then
+              docker logs "$application_name"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          docker logs "$application_name"
+          exit 1
+
+      - name: Generate image SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_TAG }}
+          format: cyclonedx
+          output: trivy-sbom.cdx.json
+          scanners: vuln
+          exit-code: "0"
+
+      - name: Validate SBOM output
+        run: test -s trivy-sbom.cdx.json
+
+      - name: Scan image for high-severity vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_TAG }}
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  validate:
+    name: validate
+    needs:
+      - dependency-packages
+      - build-and-test
+      - container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all validation gates passed
+        run: echo "All IAMService validation gates passed."
