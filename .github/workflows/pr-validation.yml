@@ -1,8 +1,40 @@
 name: Pull Request Validation
+
 on:
   pull_request:
+    branches: [develop, staging, main]
+
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     uses: ./.github/workflows/_validate.yml
+
+  dependency-packages:
+    name: Build exact public-source dependencies
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm reusable validation passed
+        run: test "${{ needs.validate.result }}" = "success"
+
+  build-and-test:
+    name: Release build, test, and dependency audit
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm reusable validation passed
+        run: test "${{ needs.validate.result }}" = "success"
+
+  container:
+    name: Build and scan production image
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm reusable validation passed
+        run: test "${{ needs.validate.result }}" = "success"
