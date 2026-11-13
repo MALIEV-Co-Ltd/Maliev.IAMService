@@ -56,7 +56,7 @@ RUN dotnet publish "Maliev.IAMService.Api.csproj" \
     /p:MessagingContractsVersion="$MESSAGING_CONTRACTS_VERSION" \
     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 COPY --chown=app:app --from=publish /app/publish .
 
